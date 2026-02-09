@@ -1,10 +1,7 @@
 import torch
 import pytorch_lightning as pl
 import torch.nn.functional as F
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent))
-from models import DCAE
+from jingwei.models import DCAE
 
 class DCAEImputer(pl.LightningModule):
     def __init__(self, full_data_tensor, full_mask_tensor, 
