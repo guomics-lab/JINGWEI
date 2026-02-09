@@ -26,6 +26,12 @@ conda activate jingwei
 
 ### Dependencies
 
+Install from PyPI:
+
+```bash
+pip install jingwei
+```
+
 Install the package in editable mode (recommended for development):
 
 ```bash
