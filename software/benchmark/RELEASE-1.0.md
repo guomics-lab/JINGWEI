@@ -19,10 +19,10 @@ The console is installed beside the GUI. From PowerShell:
 & "$env:LOCALAPPDATA\Programs\JINGWEI Benchmark\jingwei-benchmark.exe" --version
 ```
 
-Unsigned builds may be rejected by an organization's App Control policy. On the
-build machine the previous native GUI smoke passed, while the console was
-blocked before startup (WinError 4551); this is not a passed console test. No
-security policy changes or bypasses are part of installation.
+The installed V1.0 GUI and console passed runtime validation on Windows,
+including both languages, native icons, all 34 CPU methods and five CUDA neural
+methods. Installation and uninstall were tested in a path containing spaces.
+The previous console startup block did not recur in this installed build.
 
 ## Linux x86-64
 

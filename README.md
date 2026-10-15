@@ -182,7 +182,7 @@ or `--baseline-engine native` to compare against upstream execution.
 
 | Platform | Interface | Status |
 | --- | --- | --- |
-| Windows x86-64 | Native GUI + CLI | GUI validated; see local CLI note below |
+| Windows x86-64 | Native GUI + CLI installer | Installation, GUI, CLI and uninstall validated |
 | Linux x86-64 | CLI | Validated in WSL |
 | macOS arm64 / x86-64 | CLI, CPU only | Build configuration; not runtime-tested |
 
@@ -195,16 +195,18 @@ Local builds are under `software/benchmark/dist/`:
 
 ```text
 dist/
-├── windows-x86_64/
+├── v1-windows-x86_64/
 │   └── JINGWEI Benchmark/
 │       ├── JINGWEI Benchmark.exe    # GUI
 │       ├── jingwei-benchmark.exe    # CLI
 │       └── _internal/              # Shared runtime
-└── jingwei-benchmark-linux-x86_64.tar
+├── jingwei-benchmark-linux-x86_64.tar
+└── releases/v1.0.0/                # Installers, data volumes and checksums
 ```
 
-Windows users keep the whole application folder together. On Linux, extract the
-release archive and run `./jingwei-benchmark`.
+Windows: download the setup EXE and both BIN volumes into one folder, then run
+the EXE. Linux: download all four archive parts, its checksums and installer,
+then run `sh install-linux.sh`. See the [installation guide](software/benchmark/RELEASE-1.0.md).
 
 Validated on **2026-10-15**: all **34 methods** completed the CPU integration
 fixture; regression tests passed on Windows (**125**) and WSL/Linux (**120**).
@@ -215,13 +217,13 @@ Linux was also tested outside the checkout, without Qt, with a cache path
 containing spaces. These are execution checks, not a scientific ranking or
 convergence test; see the performance notes for the full-data timing protocol.
 
-Latest local build: the Windows GUI passed its executable smoke check, and the
-Linux bundle passed all 34 CPU methods, five CUDA methods and full-data Python
-MICE. The Windows console executable was built but its launch was blocked by
-this workstation's App Control signing policy (`WinError 4551`, Code Integrity
-event 3077). Its source CLI passed; the new console executable is not marked
-runtime-validated. The block requires resolution through the system's trusted
-signing/deployment process.
+The V1.0 Windows installer was tested in a path containing spaces, including
+its Start menu shortcut, version registration, installed payload, Chinese/English
+GUI, native icons, public console and uninstall. The installed console and Linux
+CLI both passed all 34 CPU methods, five CUDA methods and full-data Python MICE.
+The previous console startup block did not recur in this installed V1.0 build.
+SeqKNN, ImpSeq and MLE report their expected unsupported-input reasons on the
+default Alzheimer matrix; QRILC and Python MICE complete on that same input.
 
 No macOS artifact has been produced or runtime-tested. Its CLI build must run on
 a Mac.
@@ -407,7 +409,15 @@ This project is licensed under the [PolyForm Noncommercial 1.0.0](https://polyfo
 <details>
 <summary>Changelog</summary>
 
-### Version 0.0.1
+### Benchmark V1.0 (1.0.0)
+
+- Windows installer with Chinese/English GUI, CLI, original icon and uninstall.
+- Offline Linux CLI installer; all Python/R runtimes and 34 methods bundled.
+- Shared evaluation masks, second training mask, sample-distribution W2 and
+  Python linear MICE-PMM; default method timeout is 30 minutes.
+- Application release only; the published Python package is unchanged.
+
+### Python package 0.0.1
 
 - Initial release
 - Support for DMF and DCAE methods
