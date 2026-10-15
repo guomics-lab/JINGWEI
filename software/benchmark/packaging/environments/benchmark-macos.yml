@@ -1,0 +1,24 @@
+# Maintainer-only CLI build environment, Apple Silicon / Intel macOS.
+# VIM is built by install_backends.R (no conda-forge osx-arm64 package).
+name: jingwei_benchmark
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.12
+  - pip
+  - setuptools<81
+  - r-base
+  - r-jsonlite
+  - r-mice
+  - r-missforest
+  - r-norm
+  - r-rrcov
+  - r-glmnet
+  - r-imputelcmd
+  - bioconductor-pcamethods
+  - bioconductor-impute
+  - r-ggplot2
+  - r-reshape2
+  - compilers

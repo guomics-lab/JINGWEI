@@ -1,0 +1,22 @@
+# Maintainer build environment only. Not an installation path for benchmark users.
+-r ../../../requirements.txt
+torch==2.7.1; platform_system != "Darwin" or platform_machine != "x86_64"
+torchvision==0.22.1; platform_system != "Darwin" or platform_machine != "x86_64"
+torch==2.2.2; platform_system == "Darwin" and platform_machine == "x86_64"
+torchvision==0.17.2; platform_system == "Darwin" and platform_machine == "x86_64"
+numpy>=1.26,<2; platform_system == "Darwin" and platform_machine == "x86_64"
+pandas>=2.0,<3
+numpy>=1.24,<3
+pimms-learn==0.5.2
+fastai==2.8.12
+scikit-learn==1.6.1
+anndata>=0.10,<0.14
+tzdata
+matplotlib>=3.8,<4
+psutil>=5.9,<8
+PySide6-Essentials>=6.8,<7; platform_system == "Windows"
+pyinstaller>=6.11,<7; platform_system == "Windows"
+conda-pack>=0.8,<0.9; platform_system != "Windows"
+setuptools>=68,<81; platform_system != "Windows"
+pytest>=8,<10
+wheel

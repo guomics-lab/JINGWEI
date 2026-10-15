@@ -1,0 +1,82 @@
+#!/bin/sh
+# Offline launcher for the bundled runtime. No system Python/R/conda is used.
+set -eu
+SOURCE=$0
+links=0
+while [ -L "$SOURCE" ]; do
+    links=$((links + 1))
+    if [ "$links" -gt 40 ]; then
+        echo "Too many launcher symbolic links." >&2; exit 1
+    fi
+    link=$(readlink "$SOURCE")
+    case "$link" in
+        /*) SOURCE=$link ;;
+        *) SOURCE=$(dirname -- "$SOURCE")/$link ;;
+    esac
+done
+APPDIR=$(CDPATH='' cd -- "$(dirname -- "$SOURCE")" && pwd -P)
+if [ "$(uname -s)" != "@SYSTEM@" ] || [ "$(uname -m)" != "@MACHINE@" ]; then
+    echo "This release requires @SYSTEM@ @MACHINE@." >&2
+    exit 1
+fi
+if [ "@SYSTEM@" = Darwin ]; then
+    DEFAULT_CACHE="$HOME/Library/Caches/JINGWEI/Benchmark"
+else
+    DEFAULT_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/jingwei-benchmark"
+fi
+CACHE=${JINGWEI_BENCHMARK_CACHE:-$DEFAULT_CACHE}
+mkdir -p "$CACHE"
+CACHE=$(CDPATH='' cd -- "$CACHE" && pwd -P)
+RUNTIME="$CACHE/@RUNTIME_ID@"
+LOCK="$RUNTIME.lock"
+attempts=0
+while [ ! -f "$RUNTIME/.ready" ]; do
+    if mkdir "$LOCK" 2>/dev/null; then
+        printf '%s\n' "$$" > "$LOCK/owner"
+        trap 'rm -f "$LOCK/owner"; rmdir "$LOCK" 2>/dev/null || :' 0
+        trap 'exit 1' 1 2 3 15
+        echo "Preparing bundled JINGWEI runtime offline (first launch only)..." >&2
+        mkdir -p "$RUNTIME"
+        tar -xzf "$APPDIR/runtime.tar.gz" -C "$RUNTIME"
+        unset PYTHONHOME PYTHONPATH
+        export PYTHONNOUSERSITE=1
+        "$RUNTIME/bin/python" -I "$RUNTIME/bin/conda-unpack"
+        "$RUNTIME/bin/python" -I -c 'import hashlib,sys; actual=hashlib.file_digest(open(sys.argv[1],"rb"),"sha256").hexdigest(); assert actual==sys.argv[2], "Bundled runtime checksum mismatch"' "$APPDIR/runtime.tar.gz" '@SHA256@'
+        printf '%s\n' '@SHA256@' > "$RUNTIME/.ready"
+        rm -f "$LOCK/owner"
+        rmdir "$LOCK"
+        trap - 0 1 2 3 15
+    else
+        if [ -f "$LOCK/owner" ]; then
+            owner=$(cat "$LOCK/owner")
+            case "$owner" in
+                ''|*[!0-9]*) echo "Invalid runtime lock: $LOCK" >&2; exit 1 ;;
+                *) if ! kill -0 "$owner" 2>/dev/null; then
+                    rm -f "$LOCK/owner"
+                    rmdir "$LOCK" 2>/dev/null || :
+                    continue
+                   fi ;;
+            esac
+        fi
+        attempts=$((attempts + 1))
+        if [ "$attempts" -gt 600 ]; then
+            echo "Timed out waiting for bundled runtime: $LOCK" >&2
+            exit 1
+        fi
+        sleep 1
+    fi
+done
+chmod 700 "$RUNTIME"
+"$RUNTIME/bin/python" -I "$APPDIR/fix_r_runtime.py" "$RUNTIME"
+unset PYTHONHOME PYTHONPATH R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE
+unset JINGWEI_RSCRIPT JINGWEI_R_LIBRARY CONDA_DEFAULT_ENV
+export PYTHONNOUSERSITE=1
+export CONDA_PREFIX="$RUNTIME"
+export PATH="$RUNTIME/bin:/usr/bin:/bin"
+export R_HOME="$RUNTIME/lib/R"
+export R_LIBS_USER="$RUNTIME/lib/R/library"
+export JINGWEI_RSCRIPT="$RUNTIME/bin/Rscript"
+export JINGWEI_R_LIBRARY="$RUNTIME/lib/R/library"
+export JINGWEI_BENCHMARK_RESOURCES="$RUNTIME/share/jingwei-benchmark"
+export MPLBACKEND=Agg
+exec "$RUNTIME/bin/python" -I -m jingwei_benchmark "$@"

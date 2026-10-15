@@ -1,0 +1,6 @@
+# Scoped configuration for env-create; avoids inheriting Anaconda default channels.
+channels:
+  - conda-forge
+  - bioconda
+default_channels: []
+channel_priority: strict

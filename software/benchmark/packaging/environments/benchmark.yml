@@ -1,0 +1,8 @@
+# Portable Python base. Install the selected torch wheels + requirements-benchmark.txt next.
+name: jingwei_benchmark
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - pip

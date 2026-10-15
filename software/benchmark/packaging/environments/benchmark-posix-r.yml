@@ -1,0 +1,24 @@
+# Linux / WSL R runtime; never reuse Windows compiled R libraries in WSL.
+name: jingwei_benchmark
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.12
+  - pip
+  - setuptools<81
+  - r-base
+  - r-jsonlite
+  - r-mice
+  - r-missforest
+  - r-norm
+  - r-rrcov
+  - r-vim
+  - r-glmnet
+  - r-imputelcmd
+  - bioconductor-pcamethods
+  - bioconductor-impute
+  - r-ggplot2
+  - r-reshape2
+  - compilers

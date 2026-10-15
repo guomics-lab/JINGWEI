@@ -1,0 +1,2 @@
+software/benchmark/packaging/*.sh.in text eol=lf
+software/benchmark/packaging/languages/*.isl whitespace=-blank-at-eol

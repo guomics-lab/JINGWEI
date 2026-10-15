@@ -1,5 +1,14 @@
 results
 *.pyc
 __pycache__/
+.venv/
+.r-runtime/
+.r-library/
+.method-sources/
+.pytest_cache/
+build/
+desktop-dist/
+software/benchmark/dist/
+software/benchmark/src/*.egg-info/
 tmp/
 MNAR_plots

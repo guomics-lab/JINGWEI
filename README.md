@@ -1,56 +1,50 @@
-![JINGWEI logo](./figures/Jingwei_logo.png)
+<p align="center">
+  <img src="./figures/Jingwei_logo.png" alt="JINGWEI logo" width="112" />
+</p>
 
-# JINGWEI - Proteomic Data Imputation Framework
+<h1 align="center">JINGWEI</h1>
+
+<p align="center">
+  <strong>Proteomic Data Imputation Framework</strong><br />
+  Deep Matrix Factorization · Dilated Convolutional AutoEncoder
+</p>
+
+<p align="center">
+  <a href="#installation">Installation</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#python-api-example">Python API</a> ·
+  <a href="#benchmark-software">Benchmark</a>
+</p>
+
+---
 
 JINGWEI is a deep learning framework for missing proteomic data imputation, supporting both **DMF (Deep Matrix Factorization)** and **DCAE (Dilated Convolutional AutoEncoder)** methods.
 
+## Overview
+
+| What you want to do | Use | Get started |
+| --- | --- | --- |
+| Apply **DMF / DCAE** to your data | JINGWEI Python package | [Quick start](#quick-start) · [Python API](#python-api-example) |
+| Compare **34 imputation methods** | Standalone JINGWEI Benchmark software | [Benchmark guide](software/benchmark/README.md) |
+
 ## Features
 
-- **Multiple Imputation Methods**: Support for DMF and DCAE algorithms
-- **Flexible Architecture**: Configurable network architectures and hyperparameters
-- **GPU Acceleration**: CUDA support with specific GPU selection
-- **Comprehensive Logging**: TensorBoard integration for training monitoring
-- **Early Stopping**: Prevent overfitting with configurable patience
-- **Batch Processing**: Efficient batch training with customizable batch sizes
+| Methods | Training | Monitoring |
+| --- | --- | --- |
+| DMF and DCAE | Configurable architectures and batch sizes | TensorBoard logs |
+| CPU / CUDA execution | Early stopping and tunable hyperparameters | Training metrics and checkpoints |
 
 ## Installation
 
-### Requirements
-
-- Python 3.12
-- CUDA-capable GPU (optional, but recommended)
-
-It is recommended to use conda to manage the environment.
 ```bash
-conda create -n jingwei python=3.12
+conda create -n jingwei --override-channels -c conda-forge python=3.12 pip
 conda activate jingwei
+python -m pip install jingwei
 ```
 
-### Dependencies
-
-Install from PyPI:
-
-```bash
-pip install jingwei
-```
-
-Install the package in editable mode (recommended for development):
-
-```bash
-pip install -e .
-```
-
-If you want runtime-only dependencies without editable install:
-
-```bash
-pip install -r requirements.txt
-```
-
-Optional dev dependencies:
-
-```bash
-pip install -e .[dev]
-```
+`requirements.txt` lists the core JINGWEI package requirements. The benchmark
+software is independent of this environment; it bundles its own runtimes and
+requires no Python/R/conda installation.
 
 ## Usage
 
@@ -85,6 +79,7 @@ dataset = CSVDataset("data/Alzheimer.csv")
 model = DMFImputer(
     full_data_tensor=dataset.data_normalized,
     full_mask_tensor=dataset.mask,
+    supervision_mask_tensor=dataset.supervision_mask,
     embedding_dim=64,
     hidden_dims=[256, 128],
     batch_size=1024,
@@ -94,6 +89,7 @@ model = DMFImputer(
 # model = DCAEImputer(
 #     full_data_tensor=dataset.data_normalized,
 #     full_mask_tensor=dataset.mask,
+#     supervision_mask_tensor=dataset.supervision_mask,
 #     ae_dim=64,
 #     batch_size=1024,
 # )
@@ -107,13 +103,19 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 ### Available Parameters
 
+<details>
+<summary>Expand all training parameters</summary>
+
 #### Required Arguments
+
 - `--data-path PATH`: Path to input CSV file
 
 #### Method Selection
+
 - `--method {DMF,DCAE}`: Imputation method (default: DMF)
 
 #### General Network Parameters
+
 - `--hidden-dims DIMS`: Hidden layer dimensions, space-separated (default: "256 128")
 - `--batch-size SIZE`: Batch size for training (default: 1024)
 - `--learning-rate RATE`: Learning rate (default: 0.001)
@@ -121,31 +123,110 @@ imputed = dataset.inverse_transform(imputed_normalized)
 - `--gradient-clip VALUE`: Gradient clipping value (default: 1.0)
 
 #### DMF Specific Parameters
+
 - `--embedding-dim DIM`: Embedding dimension (default: 64)
 
 #### DCAE Specific Parameters
+
 - `--latent-dim DIM`: Latent dimension (default: 64)
 - `--num-encoder-blocks NUM`: Number of encoder blocks (default: 2)
 - `--num-decoder-blocks NUM`: Number of decoder blocks (default: 2)
 - `--dilation VALUE`: Dilation factor (default: 2)
 
 #### Loss Weights
+
 - `--mask-weight WEIGHT`: Weight for mask prediction loss (default: 0.5)
 - `--reconstruction-weight WEIGHT`: Weight for reconstruction loss (default: 1.0)
 
 #### Training Control
+
 - `--max-epochs EPOCHS`: Maximum training epochs (default: 200)
 - `--early-stopping`: Enable early stopping
 - `--patience PATIENCE`: Patience for early stopping (default: 20)
 
 #### Device Settings
+
 - `--device {cpu,cuda,auto}`: Device to use (default: auto)
 - `--gpu-id ID`: Specific GPU ID to use (0, 1, etc.)
 
 #### Output Settings
+
 - `--results-dir DIR`: Directory for saving results (default: ./results)
 - `--log-interval INTERVAL`: Logging interval in steps (default: 50)
 - `--progress-bar`: Show progress bar during training
+
+</details>
+
+## Benchmark software
+
+[**Download JINGWEI Benchmark V1.0**](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0) · [Installation guide](software/benchmark/RELEASE-1.0.md)
+
+Compare DMF/DCAE with PIMMS and traditional imputation methods using the standalone
+benchmark application. **Python, R, conda and method dependencies are bundled.**
+
+The Windows interface supports **中文 / English** and opens the bundled
+`data/Alzheimer.csv` by default. JINGWEI uses optimized native PyTorch execution;
+the original Lightning runner remains available for comparison and replay.
+The benchmark CLI defaults to **all 34 methods and 5 repeats**, with a
+**30-minute timeout per method/repeat** (`--timeout 1800`); use `--methods`
+to select a subset. The GUI initially selects DMF and DCAE with the same timeout.
+MICE-PMM now defaults to a Python linear implementation with posterior draws
+and predictive mean matching, using all **5 imputations × 5 sweeps** and all
+predictors. The full default matrix completed in about **40 seconds** in the
+local CLI check. Select `--mice-backend r` for original R PMM; NAguideR
+MICE-Norm/CART remain R methods. Implementation details and timings are recorded
+in the [performance notes](software/benchmark/PERFORMANCE.md).
+PIMMS and iterative methods also have execution optimizations that retain
+their requested model budgets. Use **Advanced → Runtime → Baseline execution**
+or `--baseline-engine native` to compare against upstream execution.
+
+| Platform | Interface | Status |
+| --- | --- | --- |
+| Windows x86-64 | Native GUI + CLI | GUI validated; see local CLI note below |
+| Linux x86-64 | CLI | Validated in WSL |
+| macOS arm64 / x86-64 | CLI, CPU only | Build configuration; not runtime-tested |
+
+[User guide](software/benchmark/README.md) · [Performance checks](software/benchmark/PERFORMANCE.md) · [Build documentation](software/benchmark/packaging/README.md)
+
+<details>
+<summary>Local software paths and validation</summary>
+
+Local builds are under `software/benchmark/dist/`:
+
+```text
+dist/
+├── windows-x86_64/
+│   └── JINGWEI Benchmark/
+│       ├── JINGWEI Benchmark.exe    # GUI
+│       ├── jingwei-benchmark.exe    # CLI
+│       └── _internal/              # Shared runtime
+└── jingwei-benchmark-linux-x86_64.tar
+```
+
+Windows users keep the whole application folder together. On Linux, extract the
+release archive and run `./jingwei-benchmark`.
+
+Validated on **2026-10-15**: all **34 methods** completed the CPU integration
+fixture; regression tests passed on Windows (**125**) and WSL/Linux (**120**).
+The current standalone bundles were checked with host conda/Python/R paths
+removed, using all **34 CPU methods** on the integration fixture and all
+**5 CUDA neural methods**.
+Linux was also tested outside the checkout, without Qt, with a cache path
+containing spaces. These are execution checks, not a scientific ranking or
+convergence test; see the performance notes for the full-data timing protocol.
+
+Latest local build: the Windows GUI passed its executable smoke check, and the
+Linux bundle passed all 34 CPU methods, five CUDA methods and full-data Python
+MICE. The Windows console executable was built but its launch was blocked by
+this workstation's App Control signing policy (`WinError 4551`, Code Integrity
+event 3077). Its source CLI passed; the new console executable is not marked
+runtime-validated. The block requires resolution through the system's trusted
+signing/deployment process.
+
+No macOS artifact has been produced or runtime-tested. Its CLI build must run on
+a Mac.
+
+</details>
 
 ## Data Format
 
@@ -181,7 +262,11 @@ results/
 
 ## Examples
 
+<details>
+<summary>More examples: custom architectures, CUDA and CPU training</summary>
+
 ### Example 1: DMF with Custom Architecture
+
 ```bash
 ./src/JINGWEI.sh --data-path data/Alzheimer.csv \
     --method DMF \
@@ -195,6 +280,7 @@ results/
 ```
 
 ### Example 2: DCAE with GPU Acceleration
+
 ```bash
 ./src/JINGWEI.sh --data-path data/Alzheimer.csv \
     --method DCAE \
@@ -208,6 +294,7 @@ results/
 ```
 
 ### Example 3: CPU Training with Custom Output Directory
+
 ```bash
 ./src/JINGWEI.sh --data-path data/Alzheimer.csv \
     --device cpu \
@@ -216,14 +303,18 @@ results/
     --log-interval 10
 ```
 
+</details>
+
 ## Method Descriptions
 
 ### DMF (Deep Matrix Factorization)
+
 - Uses row and column embeddings to capture latent patterns
 - Suitable for collaborative filtering-style missing data
 - Good for datasets with structured missing patterns
 
 ### DCAE (Dilated Convolutional AutoEncoder)
+
 - Uses dilated convolutions to capture long-range dependencies
 - Suitable for sequential or structured protein data
 - Better for complex missing data patterns
@@ -231,17 +322,22 @@ results/
 ## Monitoring Training
 
 ### TensorBoard
+
 ```bash
 tensorboard --logdir results/logs
 ```
 
 ### Training Metrics
+
 Monitor the following metrics:
 - `train_loss`: Overall training loss
 - `reconstruction_loss`: Data reconstruction quality
 - `mask_loss`: Missing data pattern prediction accuracy
 
 ## Troubleshooting
+
+<details>
+<summary>Common issues and parameter help</summary>
 
 ### Common Issues
 
@@ -269,7 +365,12 @@ For help with parameters:
 python -m jingwei.train --help
 ```
 
+</details>
+
 ## File Structure
+
+<details>
+<summary>View the repository structure</summary>
 
 ```
 JINGWEI/
@@ -279,29 +380,39 @@ JINGWEI/
 ├── src/
 │   ├── JINGWEI.sh            # Legacy training script (optional)
 │   ├── train.py              # Thin wrapper for package entry
-│   ├── jingwei/
-│   │   ├── __init__.py
-│   │   ├── train.py           # Package training entry
-│   │   ├── datasets.py        # Data loading utilities
-│   │   ├── models.py          # Model architectures (DMF/DCAE)
-│   │   ├── dmf.py             # DMF trainer
-│   │   └── dcae.py            # DCAE trainer
-│   └── methods/               # Other baselines (not packaged)
+│   └── jingwei/              # Published Python package (left untouched)
+│       ├── __init__.py
+│       ├── train.py           # Package training entry
+│       ├── datasets.py        # Data loading utilities
+│       ├── models.py          # Model architectures (DMF/DCAE)
+│       ├── dmf.py             # DMF trainer
+│       └── dcae.py            # DCAE trainer
+├── software/
+│   └── benchmark/            # Standalone JINGWEI Benchmark application
+│       ├── README.md          # End-user documentation
+│       ├── src/               # Application source
+│       ├── tests/             # Application tests
+│       └── packaging/         # Maintainer build/packaging documentation
 └── data/
     └── your_datasets.csv
 ```
 
+</details>
 
 ## License
 
 This project is licensed under the [PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/).
 
 
-## Changelog
+<details>
+<summary>Changelog</summary>
 
 ### Version 0.0.1
+
 - Initial release
 - Support for DMF and DCAE methods
 - GPU acceleration
 - Comprehensive parameter configuration
 - TensorBoard integration
+
+</details>

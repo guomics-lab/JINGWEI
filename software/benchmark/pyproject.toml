@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jingwei-benchmark"
+version = "1.0.0"
+description = "Internal application source for the standalone JINGWEI Benchmark software"
+requires-python = ">=3.12"
+readme = "README.md"
+license = { text = "PolyForm Noncommercial 1.0.0" }
+# Private build project: releases bundle dependencies; this is not an end-user pip package.
+dependencies = []
+
+[project.scripts]
+jingwei-benchmark = "jingwei_benchmark.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["jingwei_benchmark*"]
+
+[tool.setuptools.package-data]
+jingwei_benchmark = ["*.R", "assets/*.png"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["dist", "desktop-dist", "build", "results", ".venv", ".r-runtime", ".r-library", ".method-sources", "*.egg-info"]
+addopts = ["--import-mode=importlib"]

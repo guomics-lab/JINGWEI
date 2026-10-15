@@ -1,0 +1,32 @@
+#!/bin/sh
+# JINGWEI Benchmark 1.0.0 offline Linux x86-64 installer.
+set -eu
+APPDIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+PREFIX=${1:-"$HOME/.local/share/JINGWEI/Benchmark-1.0.0"}
+BIN_DIR=${2:-"$HOME/.local/bin"}
+if [ "$(uname -s)" != Linux ] || [ "$(uname -m)" != x86_64 ]; then
+    echo "This installer requires Linux x86-64." >&2; exit 1
+fi
+if [ -e "$PREFIX" ] || [ -L "$PREFIX" ]; then
+    echo "Destination already exists; choose a new installation directory: $PREFIX" >&2; exit 1
+fi
+if [ -e "$BIN_DIR/jingwei-benchmark" ] || [ -L "$BIN_DIR/jingwei-benchmark" ]; then
+    echo "Command already exists; choose another command directory: $BIN_DIR" >&2; exit 1
+fi
+cd "$APPDIR"
+sha256sum -c jingwei-benchmark-1.0.0-linux-x86_64.SHA256SUMS
+archive_hash=$(cat @PART_FILES@ | sha256sum)
+if [ "${archive_hash%% *}" != '@ARCHIVE_SHA256@' ]; then
+    echo "Combined archive checksum mismatch." >&2; exit 1
+fi
+mkdir -p "$(dirname -- "$PREFIX")" "$BIN_DIR"
+stage=$(mktemp -d "${PREFIX}.install.XXXXXX")
+trap 'rmdir "$stage" 2>/dev/null || :' 0
+cat @PART_FILES@ | tar -xf - --strip-components=1 -C "$stage"
+test -x "$stage/jingwei-benchmark"
+test -s "$stage/runtime.tar.gz"
+mv -- "$stage" "$PREFIX"
+ln -s "$(CDPATH='' cd -- "$PREFIX" && pwd -P)/jingwei-benchmark" "$BIN_DIR/jingwei-benchmark"
+echo "Installed JINGWEI Benchmark 1.0.0 to $PREFIX"
+echo "Run: $BIN_DIR/jingwei-benchmark --version"
+echo "The first launch prepares the bundled runtime offline. No conda/Python/R installation is needed."
