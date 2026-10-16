@@ -1,4 +1,8 @@
 <p align="center">
+  <strong>English</strong> · <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
+<p align="center">
   <img src="./figures/Jingwei_logo.png" alt="JINGWEI logo" width="112" />
 </p>
 
@@ -232,7 +236,8 @@ a Mac.
 
 ## Data Format
 
-The input CSV file should have the following format:
+For Python package training, the input CSV file should have the following format:
+
 - First row: Header (will be skipped)
 - First column: Sample IDs/names (will be skipped)
 - Remaining columns: Protein expression data
@@ -245,6 +250,9 @@ Sample_001,1.23,0.45,NaN,...
 Sample_002,2.34,0,1.67,...
 Sample_003,1.45,1.23,2.89,...
 ```
+
+The benchmark application detects headers and ID columns automatically and lets
+you choose the missing-value encoding; see the [benchmark guide](software/benchmark/README.md#data-and-evaluation).
 
 ## Output Files
 
@@ -376,7 +384,8 @@ python -m jingwei.train --help
 
 ```
 JINGWEI/
-├── README.md
+├── README.md                 # English documentation
+├── README.zh-CN.md           # Chinese documentation
 ├── pyproject.toml
 ├── requirements.txt
 ├── src/
