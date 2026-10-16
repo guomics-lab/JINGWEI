@@ -107,6 +107,8 @@ def parser():
         p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS,
                        help="maximum seconds per method/repeat (default: 1800; 30 min)")
         p.add_argument("--max-epochs", type=int, default=50)
+        p.add_argument("--jingwei-preset", choices=("standard", "original-benchmark"), default="standard",
+                       help="original-benchmark restores original JINGWEI model/training settings; overrides common training flags; --method-config takes precedence")
         p.add_argument("--training-engine", choices=("torch", "lightning"), default="torch",
                        help="JINGWEI native PyTorch execution, or original Lightning runner for comparison")
         p.add_argument("--batch-size", type=int, default=64)
@@ -187,6 +189,9 @@ def main(argv=None):
                 )
             )
             return 0
+        import math
+        if not math.isfinite(args.timeout):
+            raise ValueError("--timeout must be positive and finite")
         for name in (
             "repeats",
             "threads",

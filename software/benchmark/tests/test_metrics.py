@@ -104,6 +104,7 @@ def test_metrics_score_only_fixed_held_out_cells():
     mask = np.array([[False, True, False], [False, True, False]])
     assert imputation_metrics(truth, predictions, mask) == {
         "n_evaluated": 2,
+        "MSE": 4.0,
         "MAE": 2.0,
         "RMSE": 2.0,
     }

@@ -115,7 +115,7 @@ def wasserstein_distance_2(reference_samples, predicted_samples):
 def imputation_metrics(truth, predictions, evaluation_mask):
     """Score exactly the evaluation-hidden cells; never drop invalid predictions.
 
-    MAE/RMSE compare the paired entries. Native missing and training-hidden cells
+    MSE/MAE/RMSE compare the paired entries. Native missing and training-hidden cells
     are excluded. Missing or nonfinite predictions at test cells raise an error.
     Sample W2 is computed separately with wasserstein_distance_2, on complete
     matrices (or an explicitly selected common complete submatrix).
@@ -140,8 +140,12 @@ def imputation_metrics(truth, predictions, evaluation_mask):
         raise ValueError("held-out differences overflow; rescale before evaluation")
     scale = float(errors.max())
     rmse = float(scale * np.sqrt(np.mean((errors / scale) ** 2))) if scale else 0.0
+    mse = rmse * rmse
+    if not np.isfinite(mse):
+        raise ValueError("squared held-out errors overflow; rescale before evaluation")
     return {
         "n_evaluated": int(mask.sum()),
+        "MSE": mse,
         "MAE": float(np.mean(errors)),
         "RMSE": rmse,
     }

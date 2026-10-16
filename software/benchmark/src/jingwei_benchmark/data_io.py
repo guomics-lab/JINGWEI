@@ -28,10 +28,16 @@ def _cell_kind(value):
         return "text"
 
 
+def _nonblank_rows(reader):
+    # Match pandas' handling of empty/whitespace-only lines, including before
+    # the header. Delimiter-separated empty cells remain actual matrix rows.
+    return (row for row in reader if row and (len(row) != 1 or row[0].strip()))
+
+
 def detect_csv_layout(path, *, header="auto", index_column="auto"):
     """Infer headers/ID columns by type; numeric identifiers require an override."""
     with Path(path).open(encoding="utf-8-sig", newline="") as handle:
-        reader = csv.reader(handle)
+        reader = _nonblank_rows(csv.reader(handle))
         first = next(reader, [])
         if not first:
             raise ValueError("CSV is empty")
@@ -87,6 +93,8 @@ def load_matrix(
     max_dense_mb=2048,
 ):
     path = Path(path)
+    if not np.isfinite(max_dense_mb) or max_dense_mb <= 0:
+        raise ValueError("--max-dense-mb must be positive and finite")
     adata = None
     detection = None
     if path.suffix.lower() == ".h5ad":
@@ -104,17 +112,26 @@ def load_matrix(
         if layer is not None:
             raise ValueError("--layer is only valid for h5ad")
         detection = detect_csv_layout(path, header=header, index_column=index_column)
+        rows = sum(detection["first_column_types"].values())
+        columns = sum(detection["first_row_types"].values()) - int(detection["has_id_column"])
+        if rows * columns * 8 > max_dense_mb * 1024**2:
+            raise ValueError("matrix exceeds --max-dense-mb")
         if detection["has_header"]:
             with path.open(encoding="utf-8-sig", newline="") as handle:
-                names = next(csv.reader(handle))
+                names = next(_nonblank_rows(csv.reader(handle)))
             feature_header = names[1:] if detection["has_id_column"] else names
             if len(feature_header) != len(set(feature_header)):
                 raise ValueError("CSV contains duplicate column identifiers")
         frame = pd.read_csv(
             path,
             header=0 if detection["has_header"] else None,
-            index_col=0 if detection["has_id_column"] else None,
+            index_col=None,
+            dtype={0: str} if detection["has_id_column"] else None,
         )
+        if detection["has_id_column"]:
+            frame = frame.set_index(frame.columns[0])
+            if detection["has_header"] and not names[0]:
+                frame.index.name = None
         if orientation == "features-by-samples":
             frame = frame.T
     else:

@@ -7,7 +7,7 @@ import threading
 
 import numpy as np
 import pandas as pd
-from PySide6.QtCore import Qt, QObject, Signal, QRunnable, QThreadPool, QTimer, QUrl, QLockFile, QAbstractTableModel
+from PySide6.QtCore import Qt, QObject, Signal, QRunnable, QThreadPool, QTimer, QUrl, QLockFile, QAbstractTableModel, QStandardPaths
 from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QFormLayout, QLabel,
@@ -279,7 +279,7 @@ class MetricPlot(QWidget):
             axes.spines[side].set_visible(False)
         if metric not in ("Pearson", "Spearman"):
             axes.set_xlim(left=0)
-        units = self.t("秒") if metric == "time_s" else scale if metric in ("MAE", "RMSE", "W2") else self.t("无量纲")
+        units = self.t("秒") if metric == "time_s" else f"({scale})²" if metric == "MSE" else scale if metric in ("MAE", "RMSE", "W2") else self.t("无量纲")
         axes.set_xlabel(f"{metric} ({units})")
         axes.set_title(self.t("共同完整重复" if paired else "各方法成功运行"), loc="left", fontsize=11)
         self.figure.supxlabel(self.t("均值 ± 标准差（n ≥ 2）"), fontsize=8, color="#59677e")
@@ -295,6 +295,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
     def __init__(self, workspace=None, *, load_default=True):
         super().__init__()
         self.store = JobStore(workspace)
+        self.default_output_root = self.store.root / "outputs" if workspace is not None else Path(QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)) / "JINGWEI Benchmark"
         self.pool = QThreadPool.globalInstance()
         self._tasks = set()
         self.preview_data = None
@@ -413,8 +414,8 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self.update_run_state()
 
     def update_run_state(self):
-        active = any(row["state"] not in TERMINAL for row in self.store.history())
-        self.start_button.setEnabled(self.preview_data is not None and bool(self.backend_states) and not self._environment_checking and not active and not self._submitting)
+        active = bool(self.store.active())
+        self.start_button.setEnabled(self.preview_data is not None and bool(self.backend_states) and not self._environment_checking and not self._inspecting and not active and not self._submitting)
 
     def device_changed(self):
         if "gpu_id" in self.fields:
@@ -444,6 +445,29 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         path = QFileDialog.getOpenFileName(self, self.t("导入蛋白质组数据"), "", self.t("蛋白质组数据 (*.csv *.h5ad)"))[0]
         if path:
             self.set_input(path)
+
+    def choose_output(self):
+        path = QFileDialog.getExistingDirectory(self, self.t("选择输出目录"), self.output_root.text())
+        if path:
+            self.output_root.setText(path)
+
+    def choose_task(self):
+        path = QFileDialog.getExistingDirectory(self, self.t("打开任务目录"), self.output_root.text())
+        if path:
+            self.open_task(path)
+
+    def open_task(self, path):
+        if self.store.active() or self._submitting:
+            self.show_error(self.t("请先完成或停止当前任务"))
+            return
+        try:
+            job = self.store.attach(path)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            self.show_error(str(exc))
+            return
+        self.selected_job = job
+        self._last_result_digest = None
+        self.refresh_jobs()
 
     def set_input(self, path, layer_name=None):
         self.invalidate_preview()
@@ -493,14 +517,16 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         except OSError as exc:
             self.show_error(str(exc))
             return
+        self._inspect_generation += 1
         generation = self._inspect_generation
         self.inspect_button.setEnabled(False)
         self._inspecting = True
+        self.update_run_state()
         self.update_data_labels()
         def done(data):
-            self.inspect_button.setEnabled(True)
             if generation != self._inspect_generation:
                 return
+            self.inspect_button.setEnabled(True)
             self.preview_data = data
             self.preview_signature = signature
             if self._pending_features and self._pending_features[0] == signature:
@@ -532,8 +558,13 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             set_value(layer, current)
             layer.blockSignals(False)
         def failure(message):
+            if generation != self._inspect_generation:
+                return
             self.inspect_button.setEnabled(True)
             self._inspecting = False
+            self.preview_data = None
+            self.preview_signature = None
+            self.update_run_state()
             self.data_summary.setText(self.t("数据检查失败：{error}", error=message))
             self.show_error(message)
         self.background(inspect_input, done, signature[0], signature[3], error=failure)
@@ -550,7 +581,9 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         except ValueError as exc:
             self.show_error(str(exc))
             return
-        dialog = ParameterDialog(name, {**common, **self.method_parameters.get(name, {})}, self)
+        from .presets import preset_parameters
+        preset = preset_parameters(value(self.fields["jingwei_preset"]), name)
+        dialog = ParameterDialog(name, {**common, **preset, **self.method_parameters.get(name, {})}, self)
         if dialog.exec() == QDialog.Accepted:
             self.method_parameters[name] = dialog.values()
             self.remember_session()
@@ -614,6 +647,8 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             if not self.preview_data or self.signature() != self.preview_signature:
                 raise ValueError(self.t("数据或读取设置已改变，请重新检查数据"))
             config = self.configuration()
+            if not self.output_root.text().strip():
+                raise ValueError(self.t("请选择输出目录"))
         except (ValueError, OSError) as exc:
             self.show_error(str(exc))
             return
@@ -621,49 +656,47 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             return
         self._submitting = True
         self.start_button.setEnabled(False)
+        output_root = self.output_root.text().strip()
         def done(job_id):
             self._session_jobs.add(job_id)
             self.selected_job = job_id
             self._last_result_digest = None
             self._submitting = False
-            self.result_tabs.setCurrentIndex(0)
+            self.result_tabs.setCurrentIndex(2)
             self.refresh_jobs()
             self.update_run_state()
         def failure(message):
             self._submitting = False
             self.update_run_state()
             self.show_error(message)
-        self.background(self.store.submit, done, self.input_path.text(), config,
+        self.background(lambda *a: self.store.submit(*a, output_root=output_root), done, self.input_path.text(), config,
                         {name: settings for name, settings in self.method_parameters.items() if name in config["methods"]}, self.job_name.text(), error=failure)
 
     def refresh_jobs(self):
-        rows = self.store.history()
-        selected = self.selected_job
-        existing = [self.job_combo.itemData(i) for i in range(self.job_combo.count())]
-        ids = [row["id"] for row in rows]
-        if selected not in ids:
-            selected = ids[0] if ids else None
-        self.selected_job = selected
-        self.job_combo.blockSignals(True)
-        if existing != ids:
-            self.job_combo.clear()
-            for row in rows:
-                self.job_combo.addItem(row["name"], row["id"])
-        for i, row in enumerate(rows):
-            self.job_combo.setItemText(i, f"{row['name']} · {self.t(STATE_LABELS.get(row['state'],row['state']))} · {row['created_at'][:16].replace('T',' ')} UTC")
-        if selected in ids:
-            self.job_combo.setCurrentIndex(ids.index(selected))
-            self.selected_job = selected
-        self.job_combo.blockSignals(False)
         self.update_run_state()
         for button in self.job_actions:
             button.setEnabled(bool(self.selected_job))
         if not self.selected_job:
             self.cancel_button.setEnabled(False)
             return
-        info = self.store.info(self.selected_job)
+        try:
+            info = self.store.info(self.selected_job)
+        except (ValueError, OSError, KeyError, TypeError):
+            self.selected_job = None
+            self._last_result_digest = None
+            self.current_task_label.setText(self.t("尚未打开任务"))
+            self.progress_label.setText(self.t("任务目录无法读取，请重新打开任务。"))
+            self.log_view.setPlainText(self.t("任务目录无法读取，请重新打开任务。"))
+            self.run_model.replace([], self.run_model.columns)
+            self.plot.empty(self.t("暂无可比较数据"))
+            self.cancel_button.setEnabled(False)
+            for button in self.job_actions:
+                button.setEnabled(False)
+            return
+        self.current_task_label.setText(info["name"])
+        self.current_task_label.setToolTip(info["folder"])
         if info["id"] in self._session_jobs and not self._environment_retry_used:
-            environment_errors = ("cuda requested but unavailable", "rscript not found", "missing r packages",
+            environment_errors = ("cuda requested but unavailable", "rscript not found", "missing r packages", "r dependency check failed",
                                   "no module named", "dll load failed", "cannot load shared object")
             if any(any(message in (row.get("error") or "").lower() for message in environment_errors)
                    for row in info["runs"] if row.get("status") in ("failed", "skipped")):
@@ -672,26 +705,19 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self.progress.setRange(0, max(1, info["expected"]))
         self.progress.setValue(info["done"])
         self.progress_label.setText(self.t("{state} · {done}/{total}", state=self.t(STATE_LABELS[info["state"]]), done=info["done"], total=info["expected"]))
-        self.cancel_button.setEnabled(info["state"] == "running")
+        self.cancel_button.setEnabled(info["state"] == "running" and info["id"] in self.store._processes)
         digest = (info["id"], info["done"], info["state"])
         if digest != self._last_result_digest:
             self._last_result_digest = digest
             self.render_results()
-        if not self.result_table.selectedItems():
-            self.show_method_log()
-
-    def select_job(self):
-        self.selected_job = self.job_combo.currentData()
-        self._last_result_digest = None
-        if self.selected_job:
-            self.refresh_jobs()
+        self.show_method_log()
 
     def render_results(self):
         if not self.selected_job:
             return
         info = self.store.info(self.selected_job)
         runs = pd.DataFrame(info["runs"])
-        columns = ["repeat", "method", "status", "RMSE", "MAE", "NRMSE", "Pearson", "Spearman", "W2", "W2_n_samples", "W2_n_features", "W2_n_evaluated", "time_s"]
+        columns = ["repeat", "method", "status", "MSE", "RMSE", "MAE", "NRMSE", "Pearson", "Spearman", "W2", "W2_n_samples", "W2_n_features", "W2_n_evaluated", "time_s"]
         self.run_model.replace(info["runs"], columns)
         benchmark = info["config"].get("command") == "benchmark"
         self.paired.setEnabled(benchmark)
@@ -725,22 +751,38 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             return
         info = self.store.info(self.selected_job)
         folder = Path(info["folder"])
+        results = Path(info.get("results_folder", folder / "results"))
         selected = self.result_table.currentRow()
+        sections = [self.t("{state} · {done}/{total}", state=self.t(STATE_LABELS[info["state"]]), done=info["done"], total=info["expected"])]
+        paths = [("任务", folder / "launch.log")]
         if 0 <= selected < len(info["runs"]):
             row = info["runs"][selected]
-            path = folder / f"results/repeat_{row['repeat']:03d}/{row['method']}/run.log"
+            path = results / f"repeat_{row['repeat']:03d}/{row['method']}/run.log"
+            if row.get("error"):
+                sections.append(str(row["error"]))
         else:
-            logs = list((folder / "results").glob("repeat_*/*/run.log"))
-            path = max(logs, key=lambda item: item.stat().st_mtime_ns) if logs and info["state"] not in TERMINAL else folder / "launch.log"
-        try:
-            with path.open("rb") as log:
-                log.seek(max(0, path.stat().st_size - 65536))
-                content = log.read().decode("utf-8", errors="replace")
-        except OSError:
-            content = self.t("日志尚未生成。")
+            logs = list(results.glob("repeat_*/*/run.log"))
+            path = max(logs, key=lambda item: item.stat().st_mtime_ns) if logs else None
+        if path:
+            paths.append((path.parent.name, path))
+        for label, path in paths:
+            try:
+                with path.open("rb") as log:
+                    log.seek(max(0, path.stat().st_size - 32768))
+                    content = log.read().decode("utf-8", errors="replace").strip()
+                if content:
+                    sections.append(f"[{self.t(label)}]\n{content}")
+            except OSError:
+                pass
+        if len(sections) == 1 and info["state"] not in TERMINAL:
+            sections.append(self.t("正在启动计算进程…"))
+        content = "\n\n".join(sections)
         if self.log_view.toPlainText() != content:
+            scroll = self.log_view.verticalScrollBar()
+            follow = scroll.value() >= scroll.maximum() - 2
+            position = scroll.value()
             self.log_view.setPlainText(content)
-            self.log_view.verticalScrollBar().setValue(self.log_view.verticalScrollBar().maximum())
+            scroll.setValue(scroll.maximum() if follow else position)
 
     def cancel_job(self):
         if self.selected_job:
@@ -791,9 +833,15 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self.job_name.setText(info["name"] + " · " + self.t("副本"))
         self.input_path.setFocus()
         source = next(Path(info["folder"]).glob("input.*"), None)
+        if source is None and info["config"].get("input"):
+            candidate = Path(info["config"]["input"])
+            source = candidate if candidate.is_file() else None
         if source:
             self.set_input(source, info["config"].get("layer"))
             self.feature_selection = info["config"].get("w2_features")
+        else:
+            self.input_path.clear()
+            self.invalidate_preview()
         self.refresh_environment()
 
     def closeEvent(self, event):
@@ -808,7 +856,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
                 QTimer.singleShot(100, retry)
             event.ignore()
             return
-        active = [job for job in self.store.history() if job["state"] not in TERMINAL]
+        active = self.store.active()
         if active:
             question = QMessageBox(QMessageBox.Question, self.t("任务仍在运行"), self.t("停止运行中的任务并退出？"), QMessageBox.Yes | QMessageBox.No, self)
             question.button(QMessageBox.Yes).setText(self.t("是"))
@@ -842,7 +890,7 @@ def launch(workspace=None):
         language = read_json(store.root / "ui.json", {}).get("language", "zh")
         QMessageBox.information(None, "JINGWEI", translate(language, "这个工作目录已有 JINGWEI 窗口在运行。"))
         return 1
-    window = BenchmarkWindow(store.root)
+    window = BenchmarkWindow(workspace)
     window.show()
     code = app.exec()
     lock.unlock()

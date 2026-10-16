@@ -18,8 +18,9 @@ def main():
     set_process_app_id()
     app = QApplication.instance() or QApplication(["JINGWEI desktop validation"])
     if sys.platform == "win32":
-        QFontDatabase.addApplicationFont("C:/Windows/Fonts/msyh.ttc")
-        app.setFont(QFont("Microsoft YaHei UI", 10))
+        font_id = QFontDatabase.addApplicationFont("C:/Windows/Fonts/msyh.ttc")
+        families = QFontDatabase.applicationFontFamilies(font_id)
+        app.setFont(QFont(families[0] if families else "Microsoft YaHei UI", 10))
     reopening = "--reopen" in sys.argv[2:]
     previous = read_json(output / "smoke-result.json") if reopening else None
     started = time.monotonic()
@@ -30,7 +31,7 @@ def main():
     window.show()
     native_icons = {}
     app_id = None
-    if sys.platform == "win32":
+    if sys.platform == "win32" and app.platformName() == "windows":
         import ctypes
         send = ctypes.WinDLL("user32").SendMessageW
         send.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t]
@@ -55,7 +56,7 @@ def main():
     state = {"phase": "loading"}
     timer = QTimer()
 
-    def poll():
+    def step():
         if errors or time.monotonic() - started > 300:
             write_json(output / "smoke-result.json", {"status": "failed", "errors": errors or ["timed out"]})
             timer.stop()
@@ -64,6 +65,8 @@ def main():
         if state["phase"] == "loading" and window.preview_data and window.backend_states:
             timer.stop()
             state["ready_s"] = time.monotonic() - started
+            assert window.selected_job is None and window.run_model.rowCount() == 0
+            assert not hasattr(window, "job_combo")
             if reopening:
                 assert window._environment_cache_hit and window._environment_probe_count == 0
                 assert window.configuration() == previous["configuration"]
@@ -71,6 +74,7 @@ def main():
                 assert window.language == "en"
                 assert window.job_name.text() == "Reopen check"
             else:
+                window.output_root.setText(str(output / "chosen output"))
                 window.job_name.setText("Reopen check")
                 window.method_parameters = {"knn": {"k": 3}}
                 window.feature_selection = window.preview_data["feature_ids"][:10]
@@ -100,6 +104,9 @@ def main():
             if info["state"] in TERMINAL:
                 timer.stop()
                 window.refresh_jobs()
+                assert "Completed" in window.log_view.toPlainText()
+                assert Path(info["folder"]).parent == output / "chosen output"
+                window.grab().save(str(output / "desktop-log-zh.png"))
                 QTest.qWait(100)
                 window.grab().save(str(output / "desktop-results.png"))
                 window.grab().save(str(output / "desktop-results-zh.png"))
@@ -113,7 +120,9 @@ def main():
                 QTest.qWait(100)
                 window.grab().save(str(output / "desktop-results-en.png"))
                 write_json(output / "smoke-result.json", {"status": info["state"],
-                    "native_ui": True, "logo_loaded": not window.logo.isNull(),
+                    "native_ui": app.platformName() == "windows", "logo_loaded": not window.logo.isNull(),
+                    "startup_without_task": True, "custom_output": str(output / "chosen output"),
+                    "live_log": bool(window.log_view.toPlainText()),
                     "application_icon_loaded": not app.windowIcon().isNull(),
                     "windows_native_icons": native_icons,
                     "app_user_model_id": app_id, "qt_platform": app.platformName(),
@@ -133,6 +142,18 @@ def main():
                 timer.stop()
                 window.close()
                 app.quit()
+
+    def poll():
+        try:
+            step()
+        except Exception:
+            import traceback
+            errors.append(traceback.format_exc())
+            write_json(output / "smoke-result.json", {"status": "failed", "errors": errors})
+            timer.stop()
+            for job in window.store.active():
+                window.store.cancel(job["id"], force=True)
+            app.quit()
 
     timer.timeout.connect(poll)
     timer.start(200)

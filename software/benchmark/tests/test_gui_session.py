@@ -105,7 +105,7 @@ def test_missing_saved_input_and_invalid_fields_do_not_reset_to_demo(tmp_path, m
     window.close()
 
 
-def test_first_upgrade_restores_legacy_job_without_changing_its_records(tmp_path, monkeypatch):
+def test_startup_does_not_open_legacy_job_or_restore_its_parameters(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
     from jingwei_benchmark.gui import value
     from jingwei_benchmark.gui_jobs import JobStore
@@ -125,13 +125,12 @@ def test_first_upgrade_restores_legacy_job_without_changing_its_records(tmp_path
     monkeypatch.setattr(BenchmarkWindow, "refresh_jobs", lambda self: None)
     monkeypatch.setattr(environment, "inspect_environment", lambda *a, **kw: (states(), False, None))
     window = BenchmarkWindow(tmp_path)
-    until(app, lambda: window.preview_data is not None and bool(window.backend_states))
-    assert value(window.fields["mice_backend"]) == "r"
-    assert window.configuration()["methods"] == ["mice-pmm"]
-    assert window.configuration()["hidden_dims"] == [12, 6]
-    assert window.configuration()["seed"] == 17
-    assert window.method_parameters == {"mice-pmm": {"m": 3}}
-    assert Path(window.input_path.text()) == folder / "input.csv"
+    until(app, lambda: bool(window.backend_states))
+    assert window.selected_job is None
+    assert window.configuration()["seed"] == 42
+    assert window.method_parameters == {}
+    assert Path(window.input_path.text()) != folder / "input.csv"
+    assert not hasattr(window, "job_combo")
     assert request.read_bytes() == original
     window.close()
 
@@ -147,10 +146,11 @@ def test_environment_failure_rechecks_only_new_jobs_once_per_session(tmp_path, m
     monkeypatch.setattr(window, "render_results", lambda: None)
     monkeypatch.setattr(window, "show_method_log", lambda: None)
     info = {"id": "a" * 32, "name": "Failed job", "created_at": "2026-10-16T00:00:00Z",
-            "state": "failed", "expected": 1, "done": 1,
+            "state": "failed", "expected": 1, "done": 1, "folder": str(tmp_path),
             "runs": [{"status": "failed", "error": "No module named torch"}]}
     monkeypatch.setattr(window.store, "history", lambda: [info])
     monkeypatch.setattr(window.store, "info", lambda job: info)
+    window.selected_job = info["id"]
     window.refresh_jobs()
     assert not calls  # Old failures must not invalidate a healthy cached environment.
     window._session_jobs.add(info["id"])

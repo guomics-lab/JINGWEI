@@ -22,16 +22,8 @@ from .metrics import imputation_metrics, wasserstein_distance_2
 from .protocol import protocol_masks
 from .platforms import resolve_device
 from .runtime import python_command
-
-
-def dump_json(path, value):
-    path = Path(path)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False),
-        encoding="utf-8",
-    )
-    temporary.replace(path)
+from .presets import preset_parameters
+from .atomic import write_json as dump_json
 
 
 def _stop_process(process):
@@ -59,6 +51,7 @@ def _run_worker(payload, timeout, cancel_file=None):
             stderr=subprocess.STDOUT,
             start_new_session=os.name != "nt",
             env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8",
+                 "PYTHONUNBUFFERED": "1",
                  "JINGWEI_PROCESS_LOG": str((folder / "run.log").resolve())},
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
@@ -112,7 +105,7 @@ def _report(folder, results, methods, repeats, benchmark):
     frame.to_csv(folder / "metrics.csv", index=False)
     dump_json(folder / "metrics.json", results)
     summaries = []
-    metric_names = ("MAE", "RMSE", "NRMSE", "Pearson", "Spearman", "W2", "time_s")
+    metric_names = ("MSE", "MAE", "RMSE", "NRMSE", "Pearson", "Spearman", "W2", "time_s")
     for method in methods:
         selected = frame[frame.method == method]
         successful = selected[selected.status == "completed"]
@@ -149,7 +142,8 @@ def _report(folder, results, methods, repeats, benchmark):
         "Summary means include successful runs only; counts show missing runs. "
         "paired_metrics.csv contains only repeats completed by every selected method. "
         "W2 compares multivariate samples on common complete reference rows; unavailable W2 is left blank. "
-        "MAE/RMSE/NRMSE/correlations use exactly the evaluation-hidden entries."
+        "MSE/MAE/RMSE/NRMSE/correlations use exactly the evaluation-hidden entries. "
+        "MSE is RMSE squared, in squared working-scale units."
     )
     page = (
         "<!doctype html><html><meta charset='utf-8'><title>JINGWEI benchmark</title><style>body{font:15px system-ui;margin:32px}table{border-collapse:collapse;font-size:12px}td,th{padding:6px;border:1px solid #ddd}pre{white-space:pre-wrap}</style><h1>JINGWEI results</h1><p>"
@@ -173,6 +167,13 @@ def run_experiment(args):
     )
     if args.output.exists() and any(args.output.iterdir()):
         raise ValueError("output directory is not empty; choose a new --output path")
+    overrides = (
+        json.loads(args.method_config.read_text(encoding="utf-8-sig"))
+        if args.method_config else {}
+    )
+    if not isinstance(overrides, dict) or any(not isinstance(v, dict) for v in overrides.values()):
+        raise ValueError("--method-config must contain an object of parameter objects keyed by method")
+    overrides = {canonical_name(k): v for k, v in overrides.items()}
     data = load_matrix(
         args.input,
         orientation=args.orientation,
@@ -198,14 +199,6 @@ def run_experiment(args):
     device = resolve_device(args.device, args.gpu_id,
                             neural=any(METHODS[n].gpu for n in methods))
     config = {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}
-    overrides = (
-        json.loads(args.method_config.read_text(encoding="utf-8"))
-        if args.method_config
-        else {}
-    )
-    if not isinstance(overrides, dict):
-        raise ValueError("--method-config must contain an object keyed by method")
-    overrides = {canonical_name(k): v for k, v in overrides.items()}
     versions = {}
     for package in (
         "jingwei",
@@ -323,6 +316,7 @@ def run_experiment(args):
                     "hidden_dims": args.hidden_dims,
                     "learning_rate": args.learning_rate,
                     "mask_weight": args.mask_weight,
+                    **preset_parameters(getattr(args, "jingwei_preset", "standard"), method),
                     **overrides.get(method, {}),
                 }
                 payload = {

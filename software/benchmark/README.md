@@ -16,10 +16,10 @@ runs on CPU. GPU execution requires the machine's NVIDIA driver.
 
 ## Windows
 
-Download and run the [Windows installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.1/JINGWEI-Benchmark-Windows-Setup.exe).
+Download and run the [Windows installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.2/JINGWEI-Benchmark-Windows-Setup.exe).
 It automatically downloads and verifies the complete application. Install once,
 then open **Start → JINGWEI Benchmark**. No manual BIN downloads are required.
-See the [installation guide](RELEASE-1.0.1.md).
+See the [installation guide](RELEASE-1.0.2.md).
 The GUI uses the original JINGWEI bird for the
 application, window and Windows taskbar.
 
@@ -37,8 +37,14 @@ shared training settings, the second training mask, MNAR controls and W2 protein
 selection. **Runtime** shows method availability and optional backend paths.
 Each method's **Parameters** button overrides shared training settings.
 
-Persistent task history, cancellation, logs, metrics, paired comparison plots
-and complete result ZIP export are available. Plot export includes source CSV
+Choose an **Output folder** before running. Each run creates a separate named
+task folder containing its input snapshot, configuration, logs and results.
+**Open task…** opens that folder later, including a moved GUI task folder or a
+CLI output folder. Opening saved results does not rerun algorithms. Startup
+leaves the result area empty; there is no history list or automatic last-task loading.
+Cancellation, live logs, metrics, paired comparison plots and complete result
+ZIP export are available. The Log tab opens when a run starts and shows task
+progress plus the selected method's output. Plot export includes source CSV
 and provenance JSON. Method IDs and original algorithm logs retain their native
 names across languages.
 
@@ -47,7 +53,38 @@ parameters and window layout. It caches the first R/PyTorch environment check;
 reopening does not repeat that probe unless the software, backend paths,
 dependencies or GPU driver change. **Environment → Refresh** checks again.
 Data is still checked when loaded, and workers validate the actual runtime.
-An upgrade from V1.0 initially restores the most recent job's settings.
+Form preferences and the output folder are remembered independently of results.
+
+### Comparing with the original benchmark
+
+**MSE** is available in the table, plots, CSV/JSON, summary and HTML report.
+It equals RMSE squared and uses squared working-scale units. All methods use
+the same evaluation-hidden entries. For older result files lacking MSE, the
+MSE plot stays empty; saved files are never rewritten on opening.
+
+**Advanced → Training → JINGWEI parameter preset → Original benchmark parameters**
+restores the original repository benchmark's model/training configuration:
+DMF uses learning rate `5e-4`, batch size 1024 and embedding dimension 64;
+DCAE uses `5e-5`, batch size 1024, latent dimension 256, mask head 128 and
+three encoder/decoder blocks with dilation 3. Both use 50 epochs. Method-specific
+overrides take precedence and are saved with the task. The common controls remain
+available for the standard preset and other neural methods.
+
+```bash
+jingwei-benchmark benchmark --input data.csv --methods jingwei-dmf jingwei-dcae \
+  --jingwei-preset original-benchmark --output original-parameters
+```
+
+This preset changes model/training parameters only. It retains the common two-mask
+protocol and correct ID detection. Original-script results with a different mask,
+column selection, normalization or scoring subset are not directly comparable;
+matching parameters alone does not reproduce a published table or guarantee a ranking.
+
+中文：先选择**输出目录**再运行，每次生成独立任务文件夹。重新打开软件时结果区域为空，
+通过**打开任务…**选择之前的文件夹查看；不再提供任务历史列表。日志页实时显示任务进度
+和方法日志。界面会保留输入设置、输出目录及环境检查缓存。**高级设置 → 训练 → JINGWEI
+参数预设 → 原始 benchmark 参数**可使用原脚本配置；单方法参数优先。论文对比应选择
+**MSE**并核对掩蔽、数据列和尺度，不能直接与 RMSE 比较。
 
 The versioned setup EXE and BIN volumes remain available for offline installation.
 After a canceled online installation, verified completed files are reused on retry.
@@ -61,11 +98,11 @@ Console usage from PowerShell:
 
 ## Linux and macOS
 
-For Linux V1.0, download all parts, its checksums and `install-linux.sh` from
-the [release page](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0).
+For Linux V1.0.2, download all parts, its checksums and `install-linux.sh` from
+the [release page](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.2).
 Run `sh install-linux.sh`; the command is placed in `~/.local/bin`.
-Custom installation locations are described in the [installation guide](RELEASE-1.0.md).
-No macOS binary is included in V1.0. From the installed application folder:
+Custom installation locations are described in the [installation guide](RELEASE-1.0.2.md).
+No macOS binary is included in this release. From the installed application folder:
 
 ```bash
 ./jingwei-benchmark --help
@@ -180,7 +217,7 @@ imputation method. `failure_kind=unsupported_input` distinguishes these cases.
   only from the remaining observations. Evaluation truths never reach workers.
   Repeated runs record the seed, masks, parameters and dependency versions.
 - Mechanisms: MCAR, MNAR logistic, threshold and JINGWEI paper mechanism.
-- MAE/RMSE/NRMSE and correlations use evaluation entries only. Undefined
+- MSE/MAE/RMSE/NRMSE and correlations use evaluation entries only. Undefined
   correlations remain empty. W2 compares multivariate **sample distributions**
   on a common protein subset, never a flattened intensity distribution. W2
   requires originally complete reference samples and reports its scope.

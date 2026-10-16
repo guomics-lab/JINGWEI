@@ -70,7 +70,7 @@ V1.0.1 adds the primary, single-download Windows installer:
 
 ```powershell
 python software/benchmark/packaging/build_bootstrap.py --iscc "C:\path\to\ISCC.exe" `
-  --payload "software/benchmark/dist/releases/v1.0.1" `
+  --payload "software/benchmark/dist/releases/v1.0.2" `
   --icon "software/benchmark/dist/windows-x86_64/JINGWEI Benchmark/jingwei.ico"
 ```
 
@@ -144,5 +144,5 @@ python -m pytest -c software/benchmark/pyproject.toml software/benchmark/tests -
 
 This targets the application tests without modifying the published package's
 test configuration. Tests cover mask/metric parity, input handling, W2, device
-policy, cancellation, durable history and exports. Native GUI tests run on
-Windows only. Existing user job storage and schema remain unchanged.
+policy, cancellation, custom output folders, manual task opening, live logs and exports. Native GUI tests run on
+Windows only. Old task folders remain readable; result files are not modified on opening.

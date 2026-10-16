@@ -1,6 +1,17 @@
 """Small, explicit desktop message catalog; method IDs and saved data stay stable."""
 
 MESSAGES = {
+    "任务目录无法读取，请重新打开任务。": "Task folder cannot be read. Open the task again.",
+    "JINGWEI 参数预设": "JINGWEI parameter preset", "通用设置": "Common settings",
+    "原始 benchmark 参数": "Original benchmark parameters", "掩蔽预测器维度": "Mask predictor dimension",
+    "参数优先级：单方法参数 > 原始参数预设 > 通用设置。传统方法使用 CPU。": "Parameter priority: method overrides > original preset > common settings. Traditional methods use CPU.",
+    "输出目录": "Output folder", "选择输出目录": "Choose output folder", "请选择输出目录": "Choose an output folder",
+    "每次运行会在所选目录创建独立的任务文件夹。": "Each run creates a separate task folder inside this output folder.",
+    "尚未打开任务": "No task open", "打开任务…": "Open task…", "打开任务目录": "Open task folder",
+    "任务配置无效": "Invalid task configuration", "请选择包含 request.json 或 manifest.json 的任务目录": "Choose a task folder containing request.json or manifest.json",
+    "只能停止当前窗口启动的任务": "Only tasks started by this window can be stopped",
+    "任务标识与当前运行的任务冲突": "Task identifier conflicts with a running task",
+    "请先完成或停止当前任务": "Complete or stop the current task first", "正在启动计算进程…": "Starting the computation process…",
     "上次的数据文件已移动或删除，请重新选择。": "The previous data file has moved or been deleted. Please select it again.",
     "对比方法执行方式": "Baseline execution", "优化执行": "Optimized", "原生执行（复现）": "Native (replay)",
     "JINGWEI 训练引擎": "JINGWEI training engine", "PyTorch（较快）": "PyTorch (faster)", "Lightning（兼容）": "Lightning (compatibility)",

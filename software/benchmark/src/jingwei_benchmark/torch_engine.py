@@ -90,7 +90,7 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed):
         factorized = factorize_dmf(model)
     else:
         model = DCAE(input_feature_dim=matrix.shape[1], ae_dim=params.get("latent_dim", 64),
-                     mask_predictor_hidden_dim=params.get("hidden_dims", [256])[0],
+                     mask_predictor_hidden_dim=params.get("mask_predictor_hidden_dim", params.get("hidden_dims", [256])[0]),
                      num_encoder_blocks=params.get("encoder_blocks", 2),
                      num_decoder_blocks=params.get("decoder_blocks", 2),
                      dilation=params.get("dilation", 2))
@@ -115,7 +115,10 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed):
     initialized = time.perf_counter()
     model.train()
     steps = 0
-    for _ in range(epochs):
+    log_interval = max(1, epochs // 20)
+    for epoch in range(epochs):
+        total_loss = torch.zeros((), device=device)
+        batches = 0
         for indices in loader:
             indices = indices.to(device)
             batch_input = inputs.index_select(0, indices)
@@ -125,7 +128,11 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed):
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
+            total_loss += loss.detach()
+            batches += 1
             steps += 1
+        if epoch == 0 or (epoch + 1) % log_interval == 0 or epoch + 1 == epochs:
+            print(f"Epoch {epoch+1}/{epochs} | loss={float(total_loss / max(1, batches)):.6g} | steps={steps}", flush=True)
     synchronize()
     trained = time.perf_counter()
     model.eval()

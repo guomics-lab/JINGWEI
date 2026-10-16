@@ -2,9 +2,27 @@ import argparse
 import sys
 from pathlib import Path
 import pytest
+import subprocess
+from types import SimpleNamespace
 from jingwei_benchmark import platforms
 from jingwei_benchmark.cli import parser
 from jingwei_benchmark.methods import r_environment, find_rscript, availability
+
+
+@pytest.mark.parametrize('failure', ['exit', 'timeout'])
+def test_r_probe_failures_retain_cause_and_leave_python_methods_usable(monkeypatch, failure):
+    import jingwei_benchmark.methods as methods
+    monkeypatch.setattr(methods, 'find_rscript', lambda *a: 'Rscript')
+    def fail(*args, **kwargs):
+        if failure == 'timeout':
+            raise subprocess.TimeoutExpired('Rscript', 45)
+        return SimpleNamespace(returncode=123, stdout='', stderr='cannot load shared object')
+    monkeypatch.setattr(methods.subprocess, 'run', fail)
+    states = availability(names=['mean', 'bpca'])
+    assert states['mean']['available']
+    assert not states['bpca']['available']
+    assert 'R dependency check failed' in states['bpca']['reason']
+    assert 'missing R packages' not in states['bpca']['reason']
 
 
 def test_mac_cli_has_cpu_only_and_no_gpu_id(monkeypatch):

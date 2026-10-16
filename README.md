@@ -23,8 +23,8 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.1/JINGWEI-Benchmark-Windows-Setup.exe"><strong>Download Windows Benchmark Installer (.exe)</strong></a> ·
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0">Linux CLI</a>
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.2/JINGWEI-Benchmark-Windows-Setup.exe"><strong>Download Windows Benchmark Installer (.exe)</strong></a> ·
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.2">Linux CLI</a>
 </p>
 
 Download one EXE and run it; the installer handles the remaining files. After installation, open **Start → JINGWEI Benchmark**.
@@ -170,12 +170,15 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 ## Benchmark software
 
-[**Windows installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.1/JINGWEI-Benchmark-Windows-Setup.exe) · [Installation guide](software/benchmark/RELEASE-1.0.1.md) · [Linux CLI V1.0](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0)
+[**Windows installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.2/JINGWEI-Benchmark-Windows-Setup.exe) · [Installation guide](software/benchmark/RELEASE-1.0.2.md) · [Linux CLI V1.0.2](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.2)
 
 The Windows installer automatically downloads and verifies the complete software.
 Install once, then open it from the Start menu. The desktop restores the last
 data file, methods, parameters, language and window layout, and reuses its
 environment check until the application, backends or GPU driver change.
+Choose an output folder for each run. Startup leaves results empty; **Open task…**
+opens a saved task folder. The **Log** tab shows live progress. MSE and an optional
+original benchmark model/training preset are available in the benchmark software.
 
 Compare DMF/DCAE with PIMMS and traditional imputation methods using the standalone
 benchmark application. **Python, R, conda and method dependencies are bundled.**
@@ -198,7 +201,7 @@ or `--baseline-engine native` to compare against upstream execution.
 
 | Platform | Interface | Status |
 | --- | --- | --- |
-| Windows x86-64 | Native GUI + CLI installer | Installation, GUI, CLI and uninstall validated |
+| Windows x86-64 | Native GUI + CLI installer | GUI workflows, installer and public CLI tested |
 | Linux x86-64 | CLI | Validated in WSL |
 | macOS arm64 / x86-64 | CLI, CPU only | Build configuration; not runtime-tested |
 
@@ -211,21 +214,27 @@ Local builds are under `software/benchmark/dist/`:
 
 ```text
 dist/
-├── v1.0.1-windows-x86_64/
+├── v1.0.2-windows-x86_64/
 │   └── JINGWEI Benchmark/
 │       ├── JINGWEI Benchmark.exe    # GUI
 │       ├── jingwei-benchmark.exe    # CLI
 │       └── _internal/              # Shared runtime
-├── jingwei-benchmark-linux-x86_64.tar
+├── jingwei-benchmark-1.0.2-linux-x86_64.tar
 └── releases/
-    ├── v1.0.1/                    # Windows installers and checksums
+    ├── v1.0.2/                    # Windows installers, Linux CLI and checksums
     └── v1.0.0/                    # Linux CLI and original installers
 ```
 
 Windows: download and run the single Windows installer EXE. The versioned EXE
 and BIN volumes remain available for offline installation. Linux: download all
-four V1.0 archive parts, its checksums and installer, then run `sh install-linux.sh`.
-See the [installation guide](software/benchmark/RELEASE-1.0.1.md).
+all V1.0.2 archive parts, its checksums and installer, then run `sh install-linux.sh`.
+See the [installation guide](software/benchmark/RELEASE-1.0.2.md).
+
+V1.0.2 regression checks: **166 passed on Windows**, **160 on WSL/Linux**.
+The Windows public CLI completed all **34 methods** on the integration fixture;
+the Linux offline bundle completed **34 CPU / 5 CUDA methods**. GUI reopen checks
+verify live logs, a custom output folder and empty results at startup while
+retaining form preferences and the runtime cache. See the [test report](software/benchmark/SE_TESTS.md).
 
 V1.0 validation on **2026-10-15**: all **34 methods** completed the CPU integration
 fixture; regression tests passed on Windows (**125**) and WSL/Linux (**120**).

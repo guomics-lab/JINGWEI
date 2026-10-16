@@ -12,22 +12,6 @@ class SessionState:
         from pathlib import Path
         from .gui import set_value
         data = read_json(self.store.root / "session.json")
-        if not (self.store.root / "session.json").exists():
-            history = self.store.history()
-            if history:
-                last = history[0]
-                source = next(Path(last["folder"]).glob("input.*"), None)
-                fields = dict(last.get("config", {}))
-                if "mice_backend" not in fields and any(name in ("mice", "mice-pmm") for name in fields.get("methods", [])):
-                    fields["mice_backend"] = "r"
-                if isinstance(fields.get("hidden_dims"), list):
-                    fields["hidden_dims"] = ", ".join(map(str, fields["hidden_dims"]))
-                if fields.get("gpu_id") is None:
-                    fields["gpu_id"] = -1
-                data = {"schema": 1, "fields": fields, "methods": fields.get("methods", []),
-                        "parameters": last.get("parameters", {}), "job_name": last.get("name", ""),
-                        "selected_job": last["id"], "input": str(source) if source else "",
-                        "w2_features": fields.get("w2_features")}
         if not isinstance(data, dict) or data.get("schema") != 1:
             return False
         fields = data.get("fields", {})
@@ -61,10 +45,8 @@ class SessionState:
             self.method_parameters = {name: {k: v for k, v in settings.items() if k in PARAMETERS.get(name, {})}
                                       for name, settings in parameters.items() if isinstance(settings, dict) and name in PARAMETERS}
         self.job_name.setText(data.get("job_name", "") if isinstance(data.get("job_name", ""), str) else "")
-        selected = data.get("selected_job")
-        if isinstance(selected, str) and len(selected) == 32 and all(c in "0123456789abcdef" for c in selected):
-            if (self.store.jobs / selected / "request.json").is_file():
-                self.selected_job = selected
+        if isinstance(data.get("output_root"), str):
+            self.output_root.setText(data["output_root"])
         for key, restore in (("geometry", self.restoreGeometry), ("splitter", self.main_splitter.restoreState)):
             if isinstance(data.get(key), str):
                 restore(QByteArray.fromBase64(data[key].encode("ascii", errors="ignore")))
@@ -72,9 +54,6 @@ class SessionState:
         if metric >= 0:
             self.metric_choice.setCurrentIndex(metric)
         self.paired.setChecked(data.get("paired", True) is not False)
-        tab = data.get("result_tab")
-        if isinstance(tab, int) and 0 <= tab < self.result_tabs.count():
-            self.result_tabs.setCurrentIndex(tab)
         source = data.get("input")
         if load_input and isinstance(source, str) and source:
             if Path(source).is_file():
@@ -97,7 +76,7 @@ class SessionState:
         self._session_timer.setSingleShot(True)
         self._session_timer.setInterval(500)
         self._session_timer.timeout.connect(self.save_session)
-        for widget in (*self.fields.values(), self.input_path, self.job_name, self.metric_choice, self.paired):
+        for widget in (*self.fields.values(), self.input_path, self.output_root, self.job_name, self.metric_choice, self.paired):
             if isinstance(widget, QComboBox):
                 signal = widget.currentIndexChanged
             elif isinstance(widget, QCheckBox):
@@ -108,7 +87,6 @@ class SessionState:
                 signal = widget.textChanged
             signal.connect(self.remember_session)
         self.method_tree.itemChanged.connect(self.remember_session)
-        self.job_combo.currentIndexChanged.connect(self.remember_session)
         self.result_tabs.currentChanged.connect(self.remember_session)
         self.main_splitter.splitterMoved.connect(self.remember_session)
 
@@ -117,7 +95,7 @@ class SessionState:
         data = {"schema": 1, "fields": {key: value(widget) for key, widget in self.fields.items()},
                 "input": self.input_path.text(), "methods": [name for name, box in self.method_checks.items() if box.isChecked()],
                 "parameters": self.method_parameters, "w2_features": self._pending_features[1] if self._pending_features else self.feature_selection,
-                "job_name": self.job_name.text(), "selected_job": self.selected_job,
+                "job_name": self.job_name.text(), "output_root": self.output_root.text(),
                 "metric": self.metric_choice.currentData(), "paired": self.paired.isChecked(),
                 "result_tab": self.result_tabs.currentIndex(),
                 "geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),

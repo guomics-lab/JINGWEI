@@ -167,26 +167,29 @@ def availability(
         }
     )
     found = {}
+    check_error = None
     bridge = Path(__file__).with_name("r_backend.R")
     if (
         rscript
         and bridge.is_file()
         and any(s.backend == "r" for s in selected.values())
     ):
-        check = subprocess.run(
-            [rscript, "--vanilla", str(bridge), "--check", *packages],
-            env=r_environment(r_library),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=45,
-        )
-        if check.returncode == 0:
-            for line in check.stdout.splitlines():
-                fields = line.split("\t")
-                if len(fields) >= 2:
-                    found[fields[0]] = fields[1] == "TRUE"
+        try:
+            check = subprocess.run(
+                [rscript, "--vanilla", str(bridge), "--check", *packages],
+                env=r_environment(r_library), capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=45,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+            if check.returncode == 0:
+                for line in check.stdout.splitlines():
+                    fields = line.split("\t")
+                    if len(fields) >= 2:
+                        found[fields[0]] = fields[1] == "TRUE"
+            else:
+                check_error = f"R dependency check failed (exit {check.returncode}): " + (check.stderr or check.stdout or "no output")[-2000:].strip()
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            check_error = f"R dependency check failed: {exc}"
     result = {}
     for name, spec in selected.items():
         reason = None
@@ -195,6 +198,8 @@ def availability(
                 reason = "Rscript not found"
             elif not bridge.is_file():
                 reason = "R bridge not installed"
+            elif check_error:
+                reason = check_error
             else:
                 missing = [p for p in ("jsonlite", *spec.packages) if not found.get(p)]
                 if missing:

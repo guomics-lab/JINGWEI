@@ -50,7 +50,7 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
         model = DCAEImputer(
             **common,
             ae_dim=params.get("latent_dim", 64),
-            mask_predictor_hidden_dim=params.get("hidden_dims", [256])[0],
+            mask_predictor_hidden_dim=params.get("mask_predictor_hidden_dim", params.get("hidden_dims", [256])[0]),
             lambda_mask=params.get("mask_weight", 0.5),
             num_encoder_blocks=params.get("encoder_blocks", 2),
             num_decoder_blocks=params.get("decoder_blocks", 2),
