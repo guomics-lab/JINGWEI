@@ -66,6 +66,37 @@ together. Slices stay below GitHub's 2 GiB asset limit. The Chinese translation
 in `languages/` is copied unchanged from jrsoftware/issrc tag `is-6_7_3`,
 `Files/Languages/Unofficial/ChineseSimplified.isl`, retaining its credits.
 
+V1.0.1 adds the primary, single-download Windows installer:
+
+```powershell
+python software/benchmark/packaging/build_bootstrap.py --iscc "C:\path\to\ISCC.exe" `
+  --payload "software/benchmark/dist/releases/v1.0.1" `
+  --icon "software/benchmark/dist/windows-x86_64/JINGWEI Benchmark/jingwei.ico"
+```
+
+Build the offline payload first. The bootstrap includes immutable GitHub asset
+URLs, exact sizes and SHA-256 hashes. Inno Setup downloads and verifies those
+files, then invokes the same offline setup; only that setup registers the app
+and its uninstaller. Verified payload files are cached for retries and removed
+after a successful installation. `windows-installer-manifest.json` records the
+exact payload. A loopback-only `--test-server` mode is for negative fixtures;
+its manifest is marked `test_only` and must never be published.
+
+The desktop stores `session.json` and `environment.json` beside `ui.json` in the
+user workspace. Language remains in its existing file. Cache identity includes
+the app version/executable, backend paths, R package DESCRIPTION file metadata,
+source dependency versions and Windows CUDA driver/video identity. A warm
+startup uses no torch import or environment subprocess. Manual Refresh forces
+a new probe; generation tokens reject stale callbacks. Workers continue to
+validate their own environment. These metadata identities are cache invalidation
+signals, not cryptographic verification of an installation.
+
+Windows validation now runs two separate frozen GUI processes against one
+workspace and asserts that the second restores the configuration and launches
+zero environment probes. Test upgrading V1.0 to V1.0.1 and confirm that jobs
+survive with exactly one application uninstall entry. Validate the public
+bootstrap download before promoting the release to latest.
+
 ## Linux/macOS CLI
 
 ```bash

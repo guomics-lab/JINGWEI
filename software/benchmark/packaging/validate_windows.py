@@ -41,6 +41,12 @@ def main():
     assert ui["app_user_model_id"] == "JINGWEI.Benchmark.Desktop"
     assert ui["languages"] == ["zh", "en"] and ui["language_switch_keeps_configuration"]
     assert ui["default_timeout_seconds"] == 1800
+    run("desktop_smoke", output / "native-ui", "--reopen", timeout=360)
+    reopened = json.loads((output / "native-ui/reopen-result.json").read_text(encoding="utf-8"))
+    assert reopened["status"] == "completed" and reopened["environment_cache_hit"]
+    assert reopened["environment_probe_count"] == 0
+    assert reopened["configuration"] == ui["configuration"]
+    assert reopened["method_parameters"] == ui["method_parameters"]
     help_result = subprocess.run([str(console), "--help"], env=env, capture_output=True, text=True, check=True)
     assert "jingwei-benchmark" in help_result.stdout
     benchmark_help = subprocess.run([str(console), "benchmark", "--help"], env=env, capture_output=True, text=True, check=True)
@@ -93,7 +99,7 @@ def main():
         assert by_name["qrilc"]["status"] == "completed" and by_name["qrilc"]["n_evaluated"] > 0
         assert by_name["mice-pmm"]["status"] == "completed" and by_name["mice-pmm"]["n_evaluated"] > 0
         full_input_checked = True
-    (output / "validation.json").write_text(json.dumps({"native_ui": ui, "cpu_completed": len(cpu),
+    (output / "validation.json").write_text(json.dumps({"native_ui": ui, "reopened_ui": reopened, "cpu_completed": len(cpu),
         "cuda_completed": 5 if args.cuda else 0, "conda_paths_removed": True,
         "public_console_validated": True, "full_default_input_checked": full_input_checked}, indent=2), encoding="utf-8")
     print("Frozen desktop UI and backend validation passed")

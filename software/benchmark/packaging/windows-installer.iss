@@ -4,7 +4,9 @@
 #ifndef ReleaseDir
   #error ReleaseDir must point to the release output directory
 #endif
-#define AppVersion "1.0.0"
+#ifndef AppVersion
+  #error AppVersion must match the application build
+#endif
 
 [Setup]
 AppId={{91575868-B05E-4E1F-BD07-DA7D326C7329}

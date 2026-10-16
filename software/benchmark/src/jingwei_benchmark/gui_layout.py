@@ -116,7 +116,8 @@ class WorkbenchLayout:
         self._gpu_name = None
         self._environment_checking = True
         self._inspecting = False
-        self.setWindowTitle("JINGWEI Benchmark 1.0")
+        from . import __version__
+        self.setWindowTitle("JINGWEI Benchmark " + __version__)
         app = QApplication.instance()
         # A light native widget palette keeps unchecked boxes legible even when
         # Windows uses dark mode. Fusion gives stable metrics across DPI scales.
@@ -152,6 +153,7 @@ class WorkbenchLayout:
         toolbar.addWidget(self.language_choice)
         layout.addLayout(toolbar)
         splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter = splitter
         left = QWidget()
         config = QVBoxLayout(left)
         config.setContentsMargins(0, 0, 0, 0)
@@ -422,7 +424,7 @@ class WorkbenchLayout:
             form.addRow(self.label(source), row)
         self.environment_text = self.label("正在检查计算环境…", True)
         content.addWidget(self.environment_text)
-        content.addWidget(self.button("重新检查", self.refresh_environment))
+        content.addWidget(self.button("重新检查", lambda: self.refresh_environment(force=True)))
         self.environment_table = QTableWidget(0, 3)
         self.environment_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.environment_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)

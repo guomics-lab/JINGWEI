@@ -11,7 +11,7 @@ def main():
     from PySide6.QtTest import QTest
     from PySide6.QtCore import Qt, QTimer
     from jingwei_benchmark.gui import BenchmarkWindow, set_value
-    from jingwei_benchmark.gui_jobs import write_json, TERMINAL
+    from jingwei_benchmark.gui_jobs import read_json, write_json, TERMINAL
     from .windows_identity import APP_USER_MODEL_ID, set_process_app_id
     output = Path(sys.argv[1]).resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -20,7 +20,10 @@ def main():
     if sys.platform == "win32":
         QFontDatabase.addApplicationFont("C:/Windows/Fonts/msyh.ttc")
         app.setFont(QFont("Microsoft YaHei UI", 10))
-    window = BenchmarkWindow(output / "workspace", load_default=False)
+    reopening = "--reopen" in sys.argv[2:]
+    previous = read_json(output / "smoke-result.json") if reopening else None
+    started = time.monotonic()
+    window = BenchmarkWindow(output / "workspace", load_default=reopening)
     window.resize(1366, 768)
     errors = []
     window.show_error = errors.append
@@ -47,9 +50,9 @@ def main():
             free = ctypes.WinDLL("ole32").CoTaskMemFree
             free.argtypes = [ctypes.c_void_p]
             free(pointer)
-    window.load_demo()
+    if not reopening:
+        window.load_demo()
     state = {"phase": "loading"}
-    started = time.monotonic()
     timer = QTimer()
 
     def poll():
@@ -60,6 +63,18 @@ def main():
             return
         if state["phase"] == "loading" and window.preview_data and window.backend_states:
             timer.stop()
+            state["ready_s"] = time.monotonic() - started
+            if reopening:
+                assert window._environment_cache_hit and window._environment_probe_count == 0
+                assert window.configuration() == previous["configuration"]
+                assert window.method_parameters == previous["method_parameters"]
+                assert window.language == "en"
+                assert window.job_name.text() == "Reopen check"
+            else:
+                window.job_name.setText("Reopen check")
+                window.method_parameters = {"knn": {"k": 3}}
+                window.feature_selection = window.preview_data["feature_ids"][:10]
+                set_value(window.fields["seed"], 91)
             window.select_methods(["mean", "knn"])
             set_value(window.fields["repeats"], 1)
             set_value(window.fields["device"], "cpu")
@@ -108,7 +123,15 @@ def main():
                     "methods_available": sum(row["available"] for row in window.backend_states.values()),
                     "rows": window.result_table.rowCount(), "job_folder": info["folder"],
                     "plot_rows": len(window.plot.source), "errors": errors})
+                result = read_json(output / "smoke-result.json")
+                result.update(environment_cache_hit=window._environment_cache_hit,
+                              environment_probe_count=window._environment_probe_count,
+                              ready_s=state["ready_s"], configuration=state["configuration"],
+                              method_parameters=window.method_parameters, reopened=reopening)
+                write_json(output / "smoke-result.json", result)
+                write_json(output / ("reopen-result.json" if reopening else "cold-result.json"), result)
                 timer.stop()
+                window.close()
                 app.quit()
 
     timer.timeout.connect(poll)

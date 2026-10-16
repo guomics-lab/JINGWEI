@@ -16,8 +16,10 @@ runs on CPU. GPU execution requires the machine's NVIDIA driver.
 
 ## Windows
 
-Download the [V1.0 installer and every matching BIN file](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0)
-into one folder, then run the setup EXE. See the [installation guide](RELEASE-1.0.md).
+Download and run the [Windows installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.1/JINGWEI-Benchmark-Windows-Setup.exe).
+It automatically downloads and verifies the complete application. Install once,
+then open **Start → JINGWEI Benchmark**. No manual BIN downloads are required.
+See the [installation guide](RELEASE-1.0.1.md).
 The GUI uses the original JINGWEI bird for the
 application, window and Windows taskbar.
 
@@ -39,6 +41,16 @@ Persistent task history, cancellation, logs, metrics, paired comparison plots
 and complete result ZIP export are available. Plot export includes source CSV
 and provenance JSON. Method IDs and original algorithm logs retain their native
 names across languages.
+
+The desktop also restores the last data file, method selection, method-specific
+parameters and window layout. It caches the first R/PyTorch environment check;
+reopening does not repeat that probe unless the software, backend paths,
+dependencies or GPU driver change. **Environment → Refresh** checks again.
+Data is still checked when loaded, and workers validate the actual runtime.
+An upgrade from V1.0 initially restores the most recent job's settings.
+
+The versioned setup EXE and BIN volumes remain available for offline installation.
+After a canceled online installation, verified completed files are reused on retry.
 
 Console usage from PowerShell:
 

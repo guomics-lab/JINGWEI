@@ -1,13 +1,13 @@
 VSVersionInfo(
-  ffi=FixedFileInfo(filevers=(1, 0, 0, 0), prodvers=(1, 0, 0, 0),
+  ffi=FixedFileInfo(filevers=(1, 0, 1, 0), prodvers=(1, 0, 1, 0),
     mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[StringFileInfo([StringTable('040904B0', [
     StringStruct('CompanyName', 'Guomics Lab'),
     StringStruct('FileDescription', 'JINGWEI Benchmark'),
-    StringStruct('FileVersion', '1.0.0'),
+    StringStruct('FileVersion', '1.0.1'),
     StringStruct('InternalName', 'JINGWEI Benchmark'),
     StringStruct('LegalCopyright', 'JINGWEI Contributors. PolyForm Noncommercial 1.0.0.'),
     StringStruct('ProductName', 'JINGWEI Benchmark'),
-    StringStruct('ProductVersion', '1.0.0')
+    StringStruct('ProductVersion', '1.0.1')
   ])]), VarFileInfo([VarStruct('Translation', [1033, 1200])])]
 )

@@ -101,6 +101,10 @@ def find_rscript(explicit=None):
     if explicit:
         path = Path(explicit)
         return str(path.resolve()) if path.is_file() else shutil.which(explicit)
+    if getattr(sys, "frozen", False):
+        bundled = resource_root() / ".r-runtime/bin/Rscript.exe"
+        if bundled.is_file():
+            return str(bundled.resolve())
     prefix = Path(os.environ.get("CONDA_PREFIX", sys.prefix))
     root = resource_root()
     candidates = [os.environ.get("JINGWEI_RSCRIPT")]

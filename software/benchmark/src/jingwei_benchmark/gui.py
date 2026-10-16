@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import sys
+import threading
 
 import numpy as np
 import pandas as pd
@@ -19,6 +20,7 @@ from .gui_jobs import JobStore, TERMINAL, inspect_input, read_json
 from .gui_parameters import LABELS, PARAMETERS, NEURAL
 from .gui_layout import WorkbenchLayout
 from .gui_i18n import translate
+from .gui_session import SessionState
 
 STATE_LABELS = {"running": "运行中", "cancelling": "正在停止", "completed": "已完成",
                 "incomplete": "部分完成", "failed": "失败", "cancelled": "已停止", "interrupted": "已中断",
@@ -289,7 +291,7 @@ class MetricPlot(QWidget):
         return len(stats)
 
 
-class BenchmarkWindow(WorkbenchLayout, QMainWindow):
+class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
     def __init__(self, workspace=None, *, load_default=True):
         super().__init__()
         self.store = JobStore(workspace)
@@ -304,27 +306,39 @@ class BenchmarkWindow(WorkbenchLayout, QMainWindow):
         self._last_result_digest = None
         self._inspect_generation = 0
         self._submitting = False
+        self._closed = False
+        self._pending_features = None
+        self._environment_generation = 0
+        self._environment_cancel = threading.Event()
+        self._environment_cache_hit = False
+        self._environment_probe_count = 0
+        self._environment_retry_used = False
+        self._session_jobs = set()
         self.setup_ui()
+        restored_input = self.restore_session(load_input=load_default)
         self.timer = QTimer(self)
         self.timer.setInterval(900)
         self.timer.timeout.connect(self.refresh_jobs)
         self.timer.start()
         self.refresh_jobs()
         self.refresh_environment()
-        if load_default:
+        if load_default and not restored_input:
             from .runtime import default_input_path
             if path := default_input_path():
                 self.set_input(path)
+        self.connect_session()
 
     def background(self, function, done, *args, error=None):
         task = BackgroundTask(function, *args)
         self._tasks.add(task)
         def success(result):
             self._tasks.discard(task)
-            done(result)
+            if not self._closed:
+                done(result)
         def failure(message):
             self._tasks.discard(task)
-            (error or self.show_error)(message)
+            if not self._closed:
+                (error or self.show_error)(message)
         task.signals.done.connect(success)
         task.signals.error.connect(failure)
         self.pool.start(task)
@@ -339,34 +353,68 @@ class BenchmarkWindow(WorkbenchLayout, QMainWindow):
         if path:
             entry.setText(path)
 
-    def refresh_environment(self):
+    def refresh_environment(self, *, force=False):
+        from .gui_cache import environment_identity, load_environment, save_environment
+        self._environment_cancel.set()
+        self._environment_cancel = threading.Event()
+        cancel = self._environment_cancel
+        self._environment_generation += 1
+        generation = self._environment_generation
+        options = {key: value(self.fields[key]) or None for key in ("rscript", "r_library", "naguider_source", "dreamai_source", "mice_backend")}
+        identity = environment_identity(options)
+        cache = self.store.root / "environment.json"
+        result = None if force else load_environment(cache, identity)
+        self._environment_cache_hit = result is not None
+        if result is not None:
+            self.apply_environment(result)
+            return
+        if force:
+            try:
+                cache.unlink(missing_ok=True)
+            except OSError:
+                pass
+        self.backend_states = {}
         self._environment_checking = True
         self.update_environment_labels()
-        options = {key: value(self.fields[key]) or None for key in ("rscript", "r_library", "naguider_source", "dreamai_source", "mice_backend")}
+        self.update_run_state()
+        self._environment_probe_count += 1
         def inspect():
             # Probe torch and R in an isolated process, never in a Qt thread.
             from .gui_environment import inspect_environment
-            return inspect_environment(options)
+            return inspect_environment(options, cancel_event=cancel)
         def done(result):
-            self.backend_states, gpu, self._gpu_name = result
-            self._environment_checking = False
-            for name, box in self.method_checks.items():
-                box.setEnabled(self.backend_states[name]["available"])
-            self.update_environment_labels()
-            if "gpu_id" in self.fields:
-                index = self.fields["device"].findData("cuda")
-                self.fields["device"].model().item(index).setEnabled(gpu)
-                self.device_changed()
-            self.update_run_state()
+            if generation != self._environment_generation:
+                return
+            try:
+                save_environment(cache, identity, result)
+            except OSError as exc:
+                self.statusBar().showMessage(str(exc), 5000)
+            self.apply_environment(result)
         def failed(message):
+            if generation != self._environment_generation:
+                return
             self._environment_checking = False
             self.update_environment_labels()
             self.show_error(message)
         self.background(inspect, done, error=failed)
 
+    def apply_environment(self, result):
+        self.backend_states, gpu, self._gpu_name = result
+        self._environment_checking = False
+        for name, box in self.method_checks.items():
+            box.setEnabled(self.backend_states[name]["available"])
+        self.update_environment_labels()
+        if "gpu_id" in self.fields:
+            index = self.fields["device"].findData("cuda")
+            self.fields["device"].model().item(index).setEnabled(gpu)
+            if not gpu and value(self.fields["device"]) == "cuda":
+                set_value(self.fields["device"], "cpu")
+            self.device_changed()
+        self.update_run_state()
+
     def update_run_state(self):
         active = any(row["state"] not in TERMINAL for row in self.store.history())
-        self.start_button.setEnabled(self.preview_data is not None and bool(self.backend_states) and not active and not self._submitting)
+        self.start_button.setEnabled(self.preview_data is not None and bool(self.backend_states) and not self._environment_checking and not active and not self._submitting)
 
     def device_changed(self):
         if "gpu_id" in self.fields:
@@ -383,6 +431,7 @@ class BenchmarkWindow(WorkbenchLayout, QMainWindow):
         set_value(self.fields["output_scale"], "working" if benchmark else "input")
 
     def invalidate_preview(self, *args):
+        self._pending_features = None
         self._inspect_generation += 1
         self._inspecting = False
         self.preview_data = None
@@ -454,6 +503,10 @@ class BenchmarkWindow(WorkbenchLayout, QMainWindow):
                 return
             self.preview_data = data
             self.preview_signature = signature
+            if self._pending_features and self._pending_features[0] == signature:
+                available = set(data["feature_ids"])
+                self.feature_selection = [name for name in self._pending_features[1] if name in available] or None
+                self._pending_features = None
             self._inspecting = False
             self.update_run_state()
             self.update_data_labels()
@@ -500,6 +553,7 @@ class BenchmarkWindow(WorkbenchLayout, QMainWindow):
         dialog = ParameterDialog(name, {**common, **self.method_parameters.get(name, {})}, self)
         if dialog.exec() == QDialog.Accepted:
             self.method_parameters[name] = dialog.values()
+            self.remember_session()
 
     def choose_features(self):
         if not self.preview_data:
@@ -535,6 +589,7 @@ class BenchmarkWindow(WorkbenchLayout, QMainWindow):
                 return
             self.feature_selection = selection
             self.update_data_labels()
+            self.remember_session()
 
     def configuration(self):
         config = {key: value(widget) for key, widget in self.fields.items()}
@@ -567,6 +622,7 @@ class BenchmarkWindow(WorkbenchLayout, QMainWindow):
         self._submitting = True
         self.start_button.setEnabled(False)
         def done(job_id):
+            self._session_jobs.add(job_id)
             self.selected_job = job_id
             self._last_result_digest = None
             self._submitting = False
@@ -582,9 +638,12 @@ class BenchmarkWindow(WorkbenchLayout, QMainWindow):
 
     def refresh_jobs(self):
         rows = self.store.history()
-        selected = self.selected_job or (rows[0]["id"] if rows else None)
+        selected = self.selected_job
         existing = [self.job_combo.itemData(i) for i in range(self.job_combo.count())]
         ids = [row["id"] for row in rows]
+        if selected not in ids:
+            selected = ids[0] if ids else None
+        self.selected_job = selected
         self.job_combo.blockSignals(True)
         if existing != ids:
             self.job_combo.clear()
@@ -603,6 +662,13 @@ class BenchmarkWindow(WorkbenchLayout, QMainWindow):
             self.cancel_button.setEnabled(False)
             return
         info = self.store.info(self.selected_job)
+        if info["id"] in self._session_jobs and not self._environment_retry_used:
+            environment_errors = ("cuda requested but unavailable", "rscript not found", "missing r packages",
+                                  "no module named", "dll load failed", "cannot load shared object")
+            if any(any(message in (row.get("error") or "").lower() for message in environment_errors)
+                   for row in info["runs"] if row.get("status") in ("failed", "skipped")):
+                self._environment_retry_used = True
+                self.refresh_environment(force=True)
         self.progress.setRange(0, max(1, info["expected"]))
         self.progress.setValue(info["done"])
         self.progress_label.setText(self.t("{state} · {done}/{total}", state=self.t(STATE_LABELS[info["state"]]), done=info["done"], total=info["expected"]))
@@ -753,6 +819,11 @@ class BenchmarkWindow(WorkbenchLayout, QMainWindow):
                 return
         for job in active:
             self.store.cancel(job["id"], force=True)
+        self.save_session()
+        self._closed = True
+        self._environment_cancel.set()
+        self._session_timer.stop()
+        self.timer.stop()
         event.accept()
 
 

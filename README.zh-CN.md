@@ -22,6 +22,13 @@
 
 ---
 
+<p align="center">
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.1/JINGWEI-Benchmark-Windows-Setup.exe"><strong>下载 Windows 软件安装包（.exe）</strong></a> ·
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0">Linux CLI</a>
+</p>
+
+只需下载一个 EXE 并运行，其余文件由安装程序自动获取。安装后从 **开始菜单 → JINGWEI Benchmark** 打开软件。
+
 JINGWEI 是一个用于蛋白质组数据缺失值插补的深度学习框架，提供 **DMF（深度矩阵分解）** 和 **DCAE（扩张卷积自编码器）** 两种方法。
 
 ## 使用方式
@@ -29,7 +36,7 @@ JINGWEI 是一个用于蛋白质组数据缺失值插补的深度学习框架，
 | 你的需求 | 使用产品 | 开始使用 |
 | --- | --- | --- |
 | 用 **DMF / DCAE** 处理自己的数据 | JINGWEI Python 包 | [快速开始](#快速开始) · [Python API](#python-api-示例) |
-| 比较 **34 种插补方法** | 独立的 JINGWEI Benchmark 软件 | [下载 V1.0](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0) · [安装说明](software/benchmark/RELEASE-1.0.md) |
+| 比较 **34 种插补方法** | 独立的 JINGWEI Benchmark 软件 | [Windows 安装包](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.1/JINGWEI-Benchmark-Windows-Setup.exe) · [使用指南](software/benchmark/README.md) |
 
 ## 功能
 
@@ -163,7 +170,9 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 ## Benchmark 软件
 
-[**下载 JINGWEI Benchmark V1.0**](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0) · [安装说明](software/benchmark/RELEASE-1.0.md)
+[**下载 Windows 安装包（.exe）**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.1/JINGWEI-Benchmark-Windows-Setup.exe) · [安装说明](software/benchmark/RELEASE-1.0.1.md) · [Linux CLI V1.0](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0)
+
+Windows 安装程序会自动下载并校验完整软件。安装一次后，从开始菜单启动即可。软件会恢复上次的数据、方法、参数、语言和窗口布局，并复用计算环境检查结果；软件、后端或显卡驱动变化时才重新检查。
 
 使用独立软件比较 DMF/DCAE、PIMMS 和传统插补方法。**Python、R、conda 运行环境及各方法依赖均已打包。**
 
@@ -181,7 +190,7 @@ PIMMS 和迭代方法也进行了执行优化，保留用户指定的模型计�
 | Linux x86-64 | CLI | 已在 WSL 中验证 |
 | macOS arm64 / x86-64 | CLI，仅 CPU | 提供构建配置，尚未完成运行验证或发布安装包 |
 
-**Windows 安装**：将发布页中的安装 EXE 和两个 BIN 分卷下载到同一文件夹，再运行 EXE。
+**Windows 安装**：下载并运行一个 Windows 安装 EXE 即可；需要离线安装时，仍可下载带版本号的 EXE 和 BIN 分卷。
 
 **Linux 安装**：将全部四个归档分卷、对应校验文件和 `install-linux.sh` 下载到同一文件夹，再运行 `sh install-linux.sh`。
 
@@ -194,13 +203,15 @@ PIMMS 和迭代方法也进行了执行优化，保留用户指定的模型计�
 
 ```text
 dist/
-├── v1-windows-x86_64/
+├── v1.0.1-windows-x86_64/
 │   └── JINGWEI Benchmark/
 │       ├── JINGWEI Benchmark.exe    # GUI
 │       ├── jingwei-benchmark.exe    # CLI
 │       └── _internal/              # 共享运行环境
 ├── jingwei-benchmark-linux-x86_64.tar
-└── releases/v1.0.0/                # 安装程序、数据分卷和校验文件
+└── releases/
+    ├── v1.0.1/                    # Windows 安装程序与校验文件
+    └── v1.0.0/                    # Linux CLI 与原版安装程序
 ```
 
 **2026-10-15 验证记录**：CPU 集成测试中的 **34 种方法**全部完成；Windows 回归测试 **125 项通过**，WSL/Linux **120 项通过**。独立软件包在移除宿主 conda/Python/R 路径后，完成了全部 **34 种方法的 CPU 检查**和 **5 种神经方法的 CUDA 检查**。
@@ -212,6 +223,8 @@ V1.0 Windows 安装程序已在带空格的路径中验证，涵盖开始菜单�
 在默认 Alzheimer 矩阵上，SeqKNN、ImpSeq 和 MLE 会明确报告输入不适用的原因；QRILC 和 Python MICE 可在同一输入上完成运行。
 
 尚未生成或运行验证 macOS 安装包；macOS CLI 必须在 Mac 上构建。
+
+**2026-10-16，V1.0.1 桌面验证**：升级和重开检查通过，配置完整恢复，重开时环境探测进程为零。新版独立 Windows CLI 被本机 Smart App Control 拦截（错误 4551），因此尚未通过本机运行验证；桌面 GUI 正常运行，Linux CLI 继续使用 V1.0。未更改系统安全设置。
 
 </details>
 
@@ -385,6 +398,12 @@ JINGWEI/
 
 <details>
 <summary>更新记录</summary>
+
+### Benchmark V1.0.1 — Windows
+
+- 重开时恢复上次的数据、方法选择、参数及窗口布局。
+- 跨启动复用环境检查结果；运行环境变化时重新检查。
+- 提供单个 Windows 安装 EXE，自动下载并校验完整软件。
 
 ### Benchmark V1.0（1.0.0）
 

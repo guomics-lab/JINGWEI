@@ -1,6 +1,7 @@
 """Small, explicit desktop message catalog; method IDs and saved data stay stable."""
 
 MESSAGES = {
+    "上次的数据文件已移动或删除，请重新选择。": "The previous data file has moved or been deleted. Please select it again.",
     "对比方法执行方式": "Baseline execution", "优化执行": "Optimized", "原生执行（复现）": "Native (replay)",
     "JINGWEI 训练引擎": "JINGWEI training engine", "PyTorch（较快）": "PyTorch (faster)", "Lightning（兼容）": "Lightning (compatibility)",
     "方法名称": "Method",

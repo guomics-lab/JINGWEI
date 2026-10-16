@@ -22,6 +22,13 @@
 
 ---
 
+<p align="center">
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.1/JINGWEI-Benchmark-Windows-Setup.exe"><strong>Download Windows Benchmark Installer (.exe)</strong></a> ·
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0">Linux CLI</a>
+</p>
+
+Download one EXE and run it; the installer handles the remaining files. After installation, open **Start → JINGWEI Benchmark**.
+
 JINGWEI is a deep learning framework for missing proteomic data imputation, supporting both **DMF (Deep Matrix Factorization)** and **DCAE (Dilated Convolutional AutoEncoder)** methods.
 
 ## Overview
@@ -163,7 +170,12 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 ## Benchmark software
 
-[**Download JINGWEI Benchmark V1.0**](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0) · [Installation guide](software/benchmark/RELEASE-1.0.md)
+[**Windows installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.1/JINGWEI-Benchmark-Windows-Setup.exe) · [Installation guide](software/benchmark/RELEASE-1.0.1.md) · [Linux CLI V1.0](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.0)
+
+The Windows installer automatically downloads and verifies the complete software.
+Install once, then open it from the Start menu. The desktop restores the last
+data file, methods, parameters, language and window layout, and reuses its
+environment check until the application, backends or GPU driver change.
 
 Compare DMF/DCAE with PIMMS and traditional imputation methods using the standalone
 benchmark application. **Python, R, conda and method dependencies are bundled.**
@@ -199,22 +211,25 @@ Local builds are under `software/benchmark/dist/`:
 
 ```text
 dist/
-├── v1-windows-x86_64/
+├── v1.0.1-windows-x86_64/
 │   └── JINGWEI Benchmark/
 │       ├── JINGWEI Benchmark.exe    # GUI
 │       ├── jingwei-benchmark.exe    # CLI
 │       └── _internal/              # Shared runtime
 ├── jingwei-benchmark-linux-x86_64.tar
-└── releases/v1.0.0/                # Installers, data volumes and checksums
+└── releases/
+    ├── v1.0.1/                    # Windows installers and checksums
+    └── v1.0.0/                    # Linux CLI and original installers
 ```
 
-Windows: download the setup EXE and both BIN volumes into one folder, then run
-the EXE. Linux: download all four archive parts, its checksums and installer,
-then run `sh install-linux.sh`. See the [installation guide](software/benchmark/RELEASE-1.0.md).
+Windows: download and run the single Windows installer EXE. The versioned EXE
+and BIN volumes remain available for offline installation. Linux: download all
+four V1.0 archive parts, its checksums and installer, then run `sh install-linux.sh`.
+See the [installation guide](software/benchmark/RELEASE-1.0.1.md).
 
-Validated on **2026-10-15**: all **34 methods** completed the CPU integration
+V1.0 validation on **2026-10-15**: all **34 methods** completed the CPU integration
 fixture; regression tests passed on Windows (**125**) and WSL/Linux (**120**).
-The current standalone bundles were checked with host conda/Python/R paths
+Those standalone bundles were checked with host conda/Python/R paths
 removed, using all **34 CPU methods** on the integration fixture and all
 **5 CUDA neural methods**.
 Linux was also tested outside the checkout, without Qt, with a cache path
@@ -231,6 +246,12 @@ default Alzheimer matrix; QRILC and Python MICE complete on that same input.
 
 No macOS artifact has been produced or runtime-tested. Its CLI build must run on
 a Mac.
+
+V1.0.1 desktop upgrade and reopen checks passed on **2026-10-16**. Reopening
+restored the configuration and ran zero environment probes. The new standalone
+Windows console was blocked by this machine's Smart App Control (error 4551),
+so its execution is not validated here. The desktop GUI runs normally; the Linux
+CLI remains at V1.0. No system security settings were changed.
 
 </details>
 
@@ -417,6 +438,12 @@ This project is licensed under the [PolyForm Noncommercial 1.0.0](https://polyfo
 
 <details>
 <summary>Changelog</summary>
+
+### Benchmark V1.0.1 — Windows
+
+- Restore the previous data, method selection, parameters and window layout.
+- Reuse the backend environment check across launches; invalidate it when the runtime changes.
+- Provide one Windows setup EXE that downloads and verifies the complete software automatically.
 
 ### Benchmark V1.0 (1.0.0)
 
