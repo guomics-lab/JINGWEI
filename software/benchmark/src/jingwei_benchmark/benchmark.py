@@ -19,7 +19,7 @@ from scipy.stats import pearsonr, spearmanr
 from .data_io import load_matrix, write_predictions
 from .methods import METHODS, availability, canonical_name
 from .metrics import imputation_metrics, wasserstein_distance_2
-from .protocol import protocol_masks
+from .protocol import protocol_masks, uses_mask_rate
 from .platforms import resolve_device
 from .runtime import python_command
 from .presets import preset_parameters
@@ -100,7 +100,7 @@ def _run_worker(payload, timeout, cancel_file=None):
     return json.loads(result_file.read_text(encoding="utf-8"))
 
 
-def _report(folder, results, methods, repeats, benchmark):
+def _report(folder, results, methods, repeats, benchmark, notebook=False):
     frame = pd.DataFrame(results)
     frame.to_csv(folder / "metrics.csv", index=False)
     dump_json(folder / "metrics.json", results)
@@ -145,6 +145,12 @@ def _report(folder, results, methods, repeats, benchmark):
         "MSE/MAE/RMSE/NRMSE/correlations use exactly the evaluation-hidden entries. "
         "MSE is RMSE squared, in squared working-scale units."
     )
+    if notebook:
+        text = ("Historical notebook replay: first CSV column removed unconditionally; log2 of positive values; "
+                "float32 statistics fitted before masking; one original get_mask draw, no second training mask. "
+                "Scores exclude columns empty after masking and nonfinite predictions as in the old notebook. "
+                "n_held_out, n_evaluated and n_excluded show the scoring subset. Additional metrics were not "
+                "reported by the original notebook. Runtime and stochastic outputs depend on this machine and dependencies.")
     page = (
         "<!doctype html><html><meta charset='utf-8'><title>JINGWEI benchmark</title><style>body{font:15px system-ui;margin:32px}table{border-collapse:collapse;font-size:12px}td,th{padding:6px;border:1px solid #ddd}pre{white-space:pre-wrap}</style><h1>JINGWEI results</h1><p>"
         + html.escape(text)
@@ -174,7 +180,17 @@ def run_experiment(args):
     if not isinstance(overrides, dict) or any(not isinstance(v, dict) for v in overrides.values()):
         raise ValueError("--method-config must contain an object of parameter objects keyed by method")
     overrides = {canonical_name(k): v for k, v in overrides.items()}
-    data = load_matrix(
+    notebook = args.command == "benchmark" and getattr(args, "evaluation_protocol", "fair") == "original-notebook"
+    if notebook:
+        from .notebook_protocol import load_notebook_matrix, NOTEBOOK_ORDER
+        methods.sort(key=lambda method: NOTEBOOK_ORDER.index(method) if method in NOTEBOOK_ORDER else len(NOTEBOOK_ORDER))
+        args.methods = methods
+        data = load_notebook_matrix(args.input, seed=args.seed, max_dense_mb=args.max_dense_mb)
+        args.repeats = 1
+        print("Original notebook replay: first CSV column dropped; pre-mask float32 statistics; "
+              "single get_mask draw; no second mask; original score filtering. Seed=" + str(args.seed), flush=True)
+    else:
+        data = load_matrix(
         args.input,
         orientation=args.orientation,
         layer=args.layer,
@@ -185,8 +201,9 @@ def run_experiment(args):
         transform=args.transform,
         max_dense_mb=args.max_dense_mb,
     )
-    # Missingness is constructed on the declared input scale before transformation.
-    truth = data.frame.to_numpy(dtype=float)
+    # Historical CSVDataset masking uses working values (normally log2); custom
+    # MNAR mechanisms retain their declared-input-scale contract.
+    truth = data.frame.to_numpy(dtype=np.float32 if notebook else float)
     args.output.mkdir(parents=True, exist_ok=True)
     status = availability(
         args.rscript,
@@ -195,6 +212,7 @@ def run_experiment(args):
         args.dreamai_source,
         names=methods,
         mice_backend=getattr(args, "mice_backend", "python"),
+        evaluation_protocol="original-notebook" if notebook else "fair",
     )
     device = resolve_device(args.device, args.gpu_id,
                             neural=any(METHODS[n].gpu for n in methods))
@@ -228,6 +246,17 @@ def run_experiment(args):
         "observed_count": int(data.observed.sum()),
         "evaluation_scale": data.scale,
         "input_scale": args.scale,
+        "mask_protocol_version": 2,
+        "effective_protocol": ({"name": "original-notebook", "source_revision": "98686b54fdb9918a4d4cc9d99ac4880a6dadcefe",
+            "seed": args.seed, "repeats": 1, "input": "raw CSV; first column discarded",
+            "preprocessing": "log2 positives; original float32 pre-mask mean/std",
+            "evaluation": "original CSVDataset.get_mask, no calibration or marginal repair",
+            "training": "single notebook mask, no second mask",
+            "scoring": "exclude empty columns and nonfinite predictions; record excluded counts",
+            "rng": "original method order; Python/NumPy/Torch streams carried between workers"} if notebook else
+            {"name": "fair", "evaluation": args.mechanism,
+             "training": args.training_mechanism or args.mechanism,
+             "normalization": "training-available observations only"}),
         "device": device,
         "csv_detection": data.csv_detection,
         "platform": platform.platform(),
@@ -245,17 +274,24 @@ def run_experiment(args):
         mask_sequence, model_sequence = seed_sequence.spawn(2)
         mask_seed = int(mask_sequence.generate_state(1)[0] % (2**31 - 1))
         model_seed = int(model_sequence.generate_state(1)[0] % (2**31 - 1))
-        masks, mask_metadata = protocol_masks(
+        training_mechanism = args.training_mechanism or args.mechanism
+        if notebook:
+            from .notebook_protocol import notebook_masks
+            masks, mask_metadata = notebook_masks(data)
+            mask_seed = model_seed = args.seed
+        else:
+            masks, mask_metadata = protocol_masks(
             data.raw_values,
             data.observed,
+            working_values=truth,
             mechanism=args.mechanism,
             training_mechanism=args.training_mechanism,
             evaluation_rate=(
-                (None if args.paper_probabilities else args.mask_rate)
+                (args.mask_rate if uses_mask_rate(args.mechanism, args.paper_probabilities) else None)
                 if args.command == "benchmark"
                 else 0
             ),
-            training_rate=None if args.paper_probabilities else args.training_mask_rate,
+            training_rate=(args.training_mask_rate if uses_mask_rate(training_mechanism, args.paper_probabilities) else None),
             seed=mask_seed,
             preserve_marginals=not args.allow_empty_marginals,
             level=args.mask_level,
@@ -271,6 +307,9 @@ def run_experiment(args):
                 "evaluation mask has no held-out entries; increase rate or use a larger input"
             )
         repeat_dir = args.output / f"repeat_{repeat:03d}"
+        print(f"Mask | observed={int(masks.observed.sum())} | evaluation={int(masks.evaluation_hidden.sum())} | "
+              f"available={int(masks.available.sum())} | training={int(masks.training_hidden.sum())} | "
+              f"empty features={int((~masks.available.any(axis=0)).sum())}", flush=True)
         repeat_dir.mkdir()
         np.savez_compressed(
             repeat_dir / "masks.npz",
@@ -279,15 +318,21 @@ def run_experiment(args):
             training_hidden=masks.training_hidden,
         )
         # Workers receive only the first-corrupted data, never truth or native missing placeholders.
+        legacy = data.notebook_reference if notebook else None
+        extra = ({"notebook_normalized": np.where(masks.available, legacy["normalized"], 0).astype("float32"),
+                  "notebook_mean": legacy["mean"], "notebook_std": legacy["std"],
+                  "notebook_rng_state": legacy["rng_state"]} if notebook else {})
         np.savez(
             repeat_dir / "method_input.npz",
-            values=masks.method_input(truth),
+            values=np.where(masks.available, truth, np.nan) if notebook else masks.method_input(truth),
             training_hidden=masks.training_hidden,
+            **extra,
         )
         dump_json(
             repeat_dir / "mask_config.json",
             {**mask_metadata, "mask_seed": mask_seed, "model_seed": model_seed},
         )
+        notebook_rng_input = None
         for method in methods:
             folder = repeat_dir / method
             folder.mkdir()
@@ -316,7 +361,8 @@ def run_experiment(args):
                     "hidden_dims": args.hidden_dims,
                     "learning_rate": args.learning_rate,
                     "mask_weight": args.mask_weight,
-                    **preset_parameters(getattr(args, "jingwei_preset", "standard"), method),
+                    "evaluation_protocol": "original-notebook" if notebook else "fair",
+                    **preset_parameters("original-benchmark" if notebook else getattr(args, "jingwei_preset", "standard"), method),
                     **overrides.get(method, {}),
                 }
                 payload = {
@@ -332,23 +378,36 @@ def run_experiment(args):
                     "r_library": args.r_library,
                     "source_dir": args.naguider_source,
                     "dreamai_source": args.dreamai_source,
+                    "notebook_rng_input": notebook_rng_input,
                 }
                 print(f"[{repeat+1}/{repeats}] {method}", flush=True)
                 result = _run_worker(payload, args.timeout, cancel_file)
+                if notebook and (folder / 'notebook_rng.npz').is_file() and (folder / 'notebook_rng.json').is_file():
+                    notebook_rng_input = str(folder.resolve())
                 if result["status"] == "completed":
                     try:
                         prediction = np.load(
                             folder / "predictions.npz", allow_pickle=False
                         )["values"]
                         if args.command == "benchmark":
+                            if notebook:
+                                from .notebook_protocol import notebook_score_mask
+                                score_mask = notebook_score_mask(truth, prediction, masks)
+                            else:
+                                score_mask = masks.evaluation_hidden
+                            result["n_held_out"] = int(masks.evaluation_hidden.sum())
+                            result["n_excluded"] = int(masks.evaluation_hidden.sum() - score_mask.sum())
                             result.update(
                                 imputation_metrics(
-                                    truth, prediction, masks.evaluation_hidden
+                                    truth, prediction, score_mask
                                 )
                             )
+                            if notebook:
+                                from sklearn.metrics import mean_squared_error
+                                result["MSE"] = float(mean_squared_error(truth[score_mask], prediction[score_mask]))
                             actual, predicted = (
-                                truth[masks.evaluation_hidden],
-                                prediction[masks.evaluation_hidden],
+                                truth[score_mask],
+                                prediction[score_mask],
                             )
                             visible_sd = float(np.std(truth[masks.available]))
                             result["NRMSE"] = (
@@ -394,12 +453,13 @@ def run_experiment(args):
                                     np.ix_(complete_rows, positions)
                                 ].sum()
                             )
+                            finite_w2 = np.isfinite(prediction[np.ix_(complete_rows, positions)]).all()
                             result["W2"] = (
                                 wasserstein_distance_2(
                                     truth[np.ix_(complete_rows, positions)],
                                     prediction[np.ix_(complete_rows, positions)],
                                 )
-                                if complete_rows.any()
+                                if complete_rows.any() and finite_w2
                                 else None
                             )
                             result["W2_note"] = (
@@ -407,6 +467,8 @@ def run_experiment(args):
                                 if complete_rows.any()
                                 else "no complete reference samples on selected features"
                             )
+                            if not finite_w2:
+                                result["W2_note"] = "nonfinite predictions on the complete reference matrix"
                             if complete_rows.any() and result["W2_n_evaluated"] == 0:
                                 result["W2"] = None
                                 result["W2_note"] = (
@@ -419,6 +481,7 @@ def run_experiment(args):
                             method=method,
                             input_scale=args.scale,
                             output_scale=args.output_scale,
+                            allow_nonfinite=notebook,
                         )
                     except Exception as exc:
                         result.update(
@@ -429,7 +492,7 @@ def run_experiment(args):
             dump_json(folder / "result.json", row)
             manifest["runs"].append(row)
             dump_json(args.output / "manifest.json", manifest)
-            _report(args.output, results, methods, repeats, args.command == "benchmark")
+            _report(args.output, results, methods, repeats, args.command == "benchmark", notebook)
             print(
                 f"  {row['status']}"
                 + (f": {row['error']}" if row.get("error") else ""),

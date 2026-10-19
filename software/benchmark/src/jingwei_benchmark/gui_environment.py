@@ -71,7 +71,8 @@ def main():
     states = availability(options.get("rscript"), options.get("r_library"),
                           options.get("naguider_source") or find_method_source("NAguideR"),
                           options.get("dreamai_source") or find_method_source("DreamAI"),
-                          mice_backend=options.get("mice_backend") or "python")
+                          mice_backend=options.get("mice_backend") or "python",
+                          evaluation_protocol=options.get("evaluation_protocol", "fair"))
     gpu, gpu_name = False, None
     if cuda_supported():
         try:

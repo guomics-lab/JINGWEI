@@ -80,7 +80,8 @@ def main():
                 window.feature_selection = window.preview_data["feature_ids"][:10]
                 set_value(window.fields["seed"], 91)
             window.select_methods(["mean", "knn"])
-            set_value(window.fields["repeats"], 1)
+            assert "repeats" not in window.fields
+            assert window.configuration()["repeats"] == 1
             set_value(window.fields["device"], "cpu")
             window.set_language("zh")
             state["configuration"] = window.configuration()

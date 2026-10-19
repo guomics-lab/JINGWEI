@@ -16,10 +16,10 @@ runs on CPU. GPU execution requires the machine's NVIDIA driver.
 
 ## Windows
 
-Download and run the [Windows installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.2/JINGWEI-Benchmark-Windows-Setup.exe).
+Download and run the [Windows installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe).
 It automatically downloads and verifies the complete application. Install once,
 then open **Start → JINGWEI Benchmark**. No manual BIN downloads are required.
-See the [installation guide](RELEASE-1.0.2.md).
+See the [installation guide](RELEASE-1.0.3.md).
 The GUI uses the original JINGWEI bird for the
 application, window and Windows taskbar.
 
@@ -27,7 +27,7 @@ The compact workbench keeps data, methods and run settings on the left, with
 **Results / Plot / Log** tabs on the right. JINGWEI DMF and DCAE are selected by
 default. The bundled `data/Alzheimer.csv` is loaded on startup; **Example**
 returns to this dataset. Choose CSV/h5ad data, confirm its input scale, select methods, masking,
-repeats and device, then click **Run**. Run and Stop stay visible.
+a protocol and device, then click **Run**. GUI tasks run once; there is no repeat control. Run and Stop stay visible.
 
 Use **中文 / English** at the top right to switch languages immediately; the
 choice is remembered and switching keeps the current configuration and job.
@@ -55,53 +55,35 @@ dependencies or GPU driver change. **Environment → Refresh** checks again.
 Data is still checked when loaded, and workers validate the actual runtime.
 Form preferences and the output folder are remembered independently of results.
 
-### Comparing with the original benchmark
+### Original notebook and fair protocols
 
-**MSE** is available in the table, plots, CSV/JSON, summary and HTML report.
-It equals RMSE squared and uses squared working-scale units. All methods use
-the same evaluation-hidden entries. For older result files lacking MSE, the
-MSE plot stays empty; saved files are never rewritten on opening.
+**Protocol → Original notebook replay** restores the full historical pipeline,
+including unconditional first-column removal, log2 positives, pre-mask float32
+statistics, the original `get_mask()`, one mask, original adapters and score
+filtering. This is the default for new forms; existing settings retain their
+protocol. Fixed historical settings are disabled in the form. **Fair benchmark**
+retains automatic CSV/AnnData import and sequential evaluation/training masking.
 
-**Advanced → Training → JINGWEI parameter preset → Original benchmark parameters**
-restores the original repository benchmark's model/training configuration:
-DMF uses learning rate `5e-4`, batch size 1024 and embedding dimension 64;
-DCAE uses `5e-5`, batch size 1024, latent dimension 256, mask head 128 and
-three encoder/decoder blocks with dilation 3. Both use 50 epochs. Method-specific
-overrides take precedence and are saved with the task. The common controls remain
-available for the standard preset and other neural methods.
+The [replay guide](NOTEBOOK_REPLAY.md) documents exact rules, method order, random
+streams, full Alzheimer commands and the distinction from the parameter-only
+`original-benchmark` preset. Historical replay's MICE is the original Python
+linear method and its MissForest is the Python script. These are distinct from
+fair mode's PMM/R implementations.
 
-```bash
-jingwei-benchmark benchmark --input data.csv --methods jingwei-dmf jingwei-dcae \
-  --jingwei-preset original-benchmark --output original-parameters
-```
+MSE, RMSE, MAE, NRMSE, correlations and sample W2 are exported with their scope.
+The old notebook only reported MSE and runtime. Full Alzheimer mask counts and
+deterministic scores match its saved output; not all archived neural scores
+are reproduced. Direct execution of the old functions on the same machine is
+also checked. See [verification](SE_TESTS.md). Never interpret this compatibility
+profile as an exact paper-table reproduction.
 
-This preset changes model/training parameters only. It retains the common two-mask
-protocol and correct ID detection. Original-script results with a different mask,
-column selection, normalization or scoring subset are not directly comparable;
-matching parameters alone does not reproduce a published table or guarantee a ranking.
-
-中文：先选择**输出目录**再运行，每次生成独立任务文件夹。重新打开软件时结果区域为空，
-通过**打开任务…**选择之前的文件夹查看；不再提供任务历史列表。日志页实时显示任务进度
-和方法日志。界面会保留输入设置、输出目录及环境检查缓存。**高级设置 → 训练 → JINGWEI
-参数预设 → 原始 benchmark 参数**可使用原脚本配置；单方法参数优先。论文对比应选择
-**MSE**并核对掩蔽、数据列和尺度，不能直接与 RMSE 比较。
-
-The versioned setup EXE and BIN volumes remain available for offline installation.
-After a canceled online installation, verified completed files are reused on retry.
-
-Console usage from PowerShell:
-
-```powershell
-.\jingwei-benchmark.exe methods
-.\jingwei-benchmark.exe benchmark --input data.csv --methods jingwei-dmf jingwei-dcae mean knn bpca missforest --repeats 5 --device cpu --output results
-```
 
 ## Linux and macOS
 
-For Linux V1.0.2, download all parts, its checksums and `install-linux.sh` from
-the [release page](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.2).
+For Linux V1.0.3, download all parts, its checksums and `install-linux.sh` from
+the [release page](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.3).
 Run `sh install-linux.sh`; the command is placed in `~/.local/bin`.
-Custom installation locations are described in the [installation guide](RELEASE-1.0.2.md).
+Custom installation locations are described in the [installation guide](RELEASE-1.0.3.md).
 No macOS binary is included in this release. From the installed application folder:
 
 ```bash
@@ -111,7 +93,7 @@ No macOS binary is included in this release. From the installed application fold
 ./jingwei-benchmark benchmark --input data.csv \
   --methods jingwei-dmf jingwei-dcae mean knn bpca missforest \
   --mechanism mnar-jingwei --mask-rate 0.2 --training-mask-rate 0.2 \
-  --repeats 5 --device cpu --output results/my-benchmark
+  --repeats 1 --device cpu --output results/my-benchmark
 ```
 
 The first launch expands the bundled runtime into the user's local cache and
@@ -123,8 +105,8 @@ CUDA distribution is large and needs enough disk space for both the archive and
 expanded runtime. Linux/macOS distributions do not include the GUI or Qt.
 
 Linux supports `--device cuda --gpu-id 0`. macOS exposes only `--device cpu`.
-`benchmark` defaults to all 34 methods; `--methods` selects a smaller set.
-Default settings make 170 method attempts (5 repeats), with a **30-minute
+`benchmark` defaults to all 35 methods; `--methods` selects a smaller set.
+Default settings make 35 method attempts (one evaluation), with a **30-minute
 (1800-second) timeout per method/repeat**. Use `--timeout SECONDS` to change it;
 the Windows GUI exposes the same setting under Advanced → Runtime.
 Wide inputs can reach that limit for iterative methods;
@@ -213,17 +195,17 @@ imputation method. `failure_kind=unsupported_input` distinguishes these cases.
 - AnnData: `.h5ad`, X or a selected layer; original obs/var are preserved.
 - Missing encoding and raw/log2 scale are explicit. Zero/negative values are
   valid observations when missing encoding is `nan`.
-- Shared evaluation mask E is generated first. Training mask T is generated
+- In the fair profile, shared evaluation mask E is generated first. Training mask T is generated
   only from the remaining observations. Evaluation truths never reach workers.
   Repeated runs record the seed, masks, parameters and dependency versions.
-- Mechanisms: MCAR, MNAR logistic, threshold and JINGWEI paper mechanism.
+- Fair mechanisms: MCAR, custom logistic/threshold/quantile MNAR, and the historical JINGWEI threshold kernel. The complete notebook profile is separate.
 - MSE/MAE/RMSE/NRMSE and correlations use evaluation entries only. Undefined
   correlations remain empty. W2 compares multivariate **sample distributions**
   on a common protein subset, never a flattened intensity distribution. W2
   requires originally complete reference samples and reports its scope.
 - Result folders retain successful and failed method records, predictions,
   replay masks, manifest, logs, raw metrics, summaries and paired comparisons.
-  GUI comparisons default to repeats completed by every selected method.
+  New GUI jobs have one evaluation; repeat comparisons remain available when opening older multi-run tasks.
 
 These results compare methods under the chosen data/masking configuration;
 short smoke runs verify software execution, not model convergence.

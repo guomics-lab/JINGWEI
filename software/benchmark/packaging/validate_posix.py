@@ -39,11 +39,11 @@ def main():
         help_text = run("--help")
         assert "gui" not in help_text and "benchmark" in help_text
         benchmark_help = run("benchmark", "--help")
-        assert "all 34 methods" in benchmark_help and "1800; 30 min" in " ".join(benchmark_help.split())
+        assert "all 35 methods" in benchmark_help and "1800; 30 min" in " ".join(benchmark_help.split())
         default_data = json.loads(run("inspect"))
         assert (default_data["samples"], default_data["features"]) == (210, 1542)
         states = json.loads(run("methods", "--json"))
-        assert len(states) == 34 and all(state["available"] for state in states.values()), states
+        assert len(states) == 35 and all(state["available"] for state in states.values()), states
         runtime = next((output / "cache with spaces").glob("*/.ready")).parent
         check = subprocess.run([str(runtime / "bin/python"), "-I", "-c",
             "import importlib.util,jingwei_benchmark; assert importlib.util.find_spec('PySide6') is None; print(jingwei_benchmark.__file__)"],
@@ -68,7 +68,7 @@ def main():
         run(*common, "--methods", *methods, "--device", "cpu", "--output", output / "cpu")
         with (output / "cpu/metrics.csv").open() as handle:
             cpu = list(csv.DictReader(handle))
-        assert len(cpu) == (34 if args.all_methods else 4) and all(row["status"] == "completed" for row in cpu)
+        assert len(cpu) == (35 if args.all_methods else 4) and all(row["status"] == "completed" for row in cpu)
         if args.all_methods:
             for name in ("pimms-dae", "pimms-vae", "pimms-cf"):
                 detail = json.loads((output / f"cpu/repeat_000/{name}/worker_result.json").read_text())

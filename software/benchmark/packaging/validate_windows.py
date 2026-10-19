@@ -50,7 +50,7 @@ def main():
     help_result = subprocess.run([str(console), "--help"], env=env, capture_output=True, text=True, check=True)
     assert "jingwei-benchmark" in help_result.stdout
     benchmark_help = subprocess.run([str(console), "benchmark", "--help"], env=env, capture_output=True, text=True, check=True)
-    assert "all 34 methods" in benchmark_help.stdout
+    assert "all 35 methods" in benchmark_help.stdout
     assert "1800; 30 min" in " ".join(benchmark_help.stdout.split())
     default_inspection = subprocess.run([str(console), "inspect"], env=env, capture_output=True, text=True, check=True)
     default_data = json.loads(default_inspection.stdout)
@@ -64,7 +64,7 @@ def main():
     cpu = pd.read_csv(output / "cpu/metrics.csv")
     assert (cpu.status == "completed").all()
     if args.all_methods:
-        assert len(cpu) == 34
+        assert len(cpu) == 35
         for name in ("pimms-dae", "pimms-vae", "pimms-cf"):
             detail = json.loads((output / f"cpu/repeat_000/{name}/worker_result.json").read_text())
             assert detail["pimms_acceleration"]["applied"] and detail["training_steps"] > 0

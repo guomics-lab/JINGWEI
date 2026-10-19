@@ -8,6 +8,7 @@ from . import __version__
 from .data_io import load_matrix
 from .methods import METHODS, availability, find_method_source
 from .protocol import MECHANISMS
+from .notebook_protocol import PROTOCOLS
 from .platforms import add_device_arguments
 from .runtime import default_input_path
 
@@ -57,6 +58,8 @@ def parser():
         p.add_argument("--scale", choices=("raw", "log2"), default="raw")
         p.add_argument("--transform", choices=("auto", "none", "log2"), default="auto")
         p.add_argument("--max-dense-mb", type=int, default=2048)
+        p.add_argument("--evaluation-protocol", choices=PROTOCOLS, default="fair",
+                       help="fair: shared evaluation then training mask; original-notebook: historical raw-CSV preprocessing, single mask and scoring")
         if command == "inspect":
             continue
         p.add_argument("--output", type=Path, required=True)
@@ -70,7 +73,7 @@ def parser():
             "--methods",
             nargs="+",
             default=["all"] if command == "benchmark" else ["jingwei-dmf", "jingwei-dcae", "mean", "median", "knn"],
-            help="method IDs or all (benchmark default: all 34 methods)",
+            help="method IDs or all (benchmark default: all 35 methods)",
         )
         p.add_argument(
             "--method-config",
@@ -78,14 +81,15 @@ def parser():
             help="JSON object of per-method parameter overrides",
         )
         add_device_arguments(p)
-        p.add_argument("--mechanism", choices=MECHANISMS, default="mcar")
+        p.add_argument("--mechanism", choices=MECHANISMS, default="mcar",
+                       help="mnar-jingwei-original replays historical CSVDataset.get_mask on working-scale data; mnar-jingwei retains the older custom quantile rule")
         p.add_argument("--training-mechanism", choices=MECHANISMS)
         p.add_argument("--mask-rate", type=float, default=0.2)
         p.add_argument("--training-mask-rate", type=float, default=0.2)
         p.add_argument(
-            "--paper-probabilities",
+            "--paper-probabilities", "--uncalibrated-mnar",
             action="store_true",
-            help="use uncalibrated MNAR probabilities, recording actual rates",
+            help="use uncalibrated custom MNAR probabilities; MCAR still uses its rate; original-repository masking is always uncalibrated (historical flag name, not a paper-replication guarantee)",
         )
         p.add_argument(
             "--mask-level", choices=("entry", "feature-mean"), default="entry"
@@ -97,7 +101,7 @@ def parser():
         p.add_argument("--high-probability", type=float, default=0.2)
         p.add_argument("--threshold-probability", type=float, default=0.05)
         p.add_argument("--allow-empty-marginals", action="store_true")
-        p.add_argument("--repeats", type=int, default=5)
+        p.add_argument("--repeats", type=int, default=1)
         p.add_argument("--seed", type=int, default=42)
         p.add_argument("--threads", type=int, default=4)
         p.add_argument("--baseline-engine", choices=("optimized", "native"), default="optimized",
@@ -164,7 +168,11 @@ def main(argv=None):
                     )
             return 0
         if args.command == "inspect":
-            data = load_matrix(
+            if args.evaluation_protocol == "original-notebook":
+                from .notebook_protocol import load_notebook_matrix
+                data = load_notebook_matrix(args.input, max_dense_mb=args.max_dense_mb)
+            else:
+                data = load_matrix(
                 args.input,
                 orientation=args.orientation,
                 layer=args.layer,

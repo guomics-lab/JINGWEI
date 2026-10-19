@@ -32,6 +32,7 @@ def main():
 
         with np.load(payload["input_file"], allow_pickle=False) as data:
             matrix, training_hidden = data["values"], data["training_hidden"]
+            legacy = {key: data["notebook_" + key] for key in ("normalized", "mean", "std", "rng_state")} if "notebook_normalized" in data else None
         print(f"Input: {matrix.shape[0]} samples x {matrix.shape[1]} proteins | "
               f"observed={int(np.isfinite(matrix).sum())} | training masked={int(training_hidden.sum())}", flush=True)
         if payload["method"].startswith(("jingwei-", "pimms-")):
@@ -45,19 +46,18 @@ def main():
             # retain its original R method, including already-running batches.
             if payload["method"] == "mice-pmm" and "mice_backend" not in parameters:
                 parameters["mice_backend"] = "r"
-            prediction, metadata = run_method(
-                payload["method"],
-                matrix,
-                training_hidden,
-                parameters,
-                device=payload["device"],
-                seed=payload["seed"],
-                folder=folder,
-                rscript=payload.get("rscript"),
-                r_library=payload.get("r_library"),
-                source_dir=payload.get("source_dir"),
-                dreamai_source=payload.get("dreamai_source"),
-            )
+            def compute(values, hidden):
+                return run_method(payload["method"], values, hidden, parameters,
+                    device=payload["device"], seed=payload["seed"], folder=folder,
+                    rscript=payload.get("rscript"), r_library=payload.get("r_library"),
+                    source_dir=payload.get("source_dir"), dreamai_source=payload.get("dreamai_source"))
+            if legacy is not None:
+                from .notebook_engine import run_notebook_method
+                prediction, metadata = run_notebook_method(payload["method"], matrix, training_hidden,
+                    parameters, legacy, device=payload["device"], seed=payload["seed"], fallback=compute,
+                    folder=folder, rng_input=payload.get("notebook_rng_input"))
+            else:
+                prediction, metadata = compute(matrix, training_hidden)
         computed = time.perf_counter()
         temporary = folder / "predictions.npz.tmp"
         with temporary.open("wb") as handle:

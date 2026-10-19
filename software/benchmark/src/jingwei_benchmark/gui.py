@@ -400,7 +400,15 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self.background(inspect, done, error=failed)
 
     def apply_environment(self, result):
-        self.backend_states, gpu, self._gpu_name = result
+        self._environment_base_result = result
+        states, gpu, self._gpu_name = result
+        self.backend_states = {name: dict(state) for name, state in states.items()}
+        if value(self.fields["command"]) == "benchmark" and value(self.fields["evaluation_protocol"]) == "original-notebook":
+            from importlib.util import find_spec
+            installed = find_spec("sklearn") is not None
+            for name in ("missforest", "mice-pmm"):
+                self.backend_states[name] = {**self.backend_states[name], "backend": "python", "available": installed,
+                                             "reason": None if installed else "scikit-learn is missing"}
         self._environment_checking = False
         for name, box in self.method_checks.items():
             box.setEnabled(self.backend_states[name]["available"])
@@ -423,13 +431,13 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
 
     def mode_changed(self):
         benchmark = value(self.fields["command"]) == "benchmark"
-        for key in ("mask_rate", "mechanism", "repeats", "training_mechanism", "training_mask_rate", "mask_level",
+        for key in ("mask_rate", "mechanism", "training_mechanism", "training_mask_rate", "mask_level",
                     "logistic_slope", "low_quantile", "high_quantile", "low_probability", "high_probability", "threshold_probability",
                     "paper_probabilities", "allow_empty_marginals"):
             self.fields[key].setEnabled(benchmark)
-        self.fields["repeats"].setEnabled(benchmark)
         self.protocol_summary.setVisible(benchmark)
         set_value(self.fields["output_scale"], "working" if benchmark else "input")
+        self.update_mask_controls()
 
     def invalidate_preview(self, *args):
         self._pending_features = None
@@ -504,7 +512,10 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
 
     def input_options(self):
         keys = ("orientation", "layer", "index_column", "header", "missing_values", "scale", "transform", "max_dense_mb")
-        return {key: value(self.fields[key]) for key in keys}
+        options = {key: value(self.fields[key]) for key in keys}
+        if value(self.fields["command"]) == "benchmark" and value(self.fields["evaluation_protocol"]) == "original-notebook":
+            options["evaluation_protocol"] = "original-notebook"
+        return options
 
     def signature(self):
         path = Path(self.input_path.text()).resolve()
@@ -635,8 +646,9 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             config["gpu_id"] = None
         for key in ("rscript", "r_library", "naguider_source", "dreamai_source"):
             config[key] = config[key] or None
+        config["repeats"] = 1
         if config["command"] == "impute":
-            config["repeats"] = 1
+            config["evaluation_protocol"] = "fair"
         config["w2_features"] = self.feature_selection
         if not config["methods"]:
             raise ValueError(self.t("至少选择一种方法"))
@@ -657,6 +669,8 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self._submitting = True
         self.start_button.setEnabled(False)
         output_root = self.output_root.text().strip()
+        parameters = {} if config["evaluation_protocol"] == "original-notebook" else {
+            name: settings for name, settings in self.method_parameters.items() if name in config["methods"]}
         def done(job_id):
             self._session_jobs.add(job_id)
             self.selected_job = job_id
@@ -670,7 +684,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             self.update_run_state()
             self.show_error(message)
         self.background(lambda *a: self.store.submit(*a, output_root=output_root), done, self.input_path.text(), config,
-                        {name: settings for name, settings in self.method_parameters.items() if name in config["methods"]}, self.job_name.text(), error=failure)
+                        parameters, self.job_name.text(), error=failure)
 
     def refresh_jobs(self):
         self.update_run_state()
@@ -720,8 +734,11 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         columns = ["repeat", "method", "status", "MSE", "RMSE", "MAE", "NRMSE", "Pearson", "Spearman", "W2", "W2_n_samples", "W2_n_features", "W2_n_evaluated", "time_s"]
         self.run_model.replace(info["runs"], columns)
         benchmark = info["config"].get("command") == "benchmark"
-        self.paired.setEnabled(benchmark)
-        paired = self.paired.isChecked() and benchmark
+        multiple = info["config"].get("repeats", 1) > 1
+        self.paired.setVisible(benchmark and multiple)
+        self.paired.setEnabled(benchmark and multiple)
+        self.result_table.setColumnHidden(0, not multiple)
+        paired = self.paired.isChecked() and benchmark and multiple
         if paired and not runs.empty:
             total = len(info["config"]["methods"])
             groups = runs.groupby("repeat")
@@ -820,6 +837,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         if not self.selected_job:
             return
         info = self.store.info(self.selected_job)
+        set_value(self.fields["evaluation_protocol"], info["config"].get("evaluation_protocol", "fair"))
         if "mice_backend" not in info["config"] and any(
                 name in ("mice", "mice-pmm") for name in info["config"]["methods"]):
             set_value(self.fields["mice_backend"], "r")

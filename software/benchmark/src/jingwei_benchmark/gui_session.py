@@ -17,6 +17,9 @@ class SessionState:
         fields = data.get("fields", {})
         if not isinstance(fields, dict):
             return False
+        # Pre-1.0.3 forms always used the fair protocol. Do not silently relabel
+        # their quantile mechanism or revive an old repeat count.
+        set_value(self.fields["evaluation_protocol"], fields.get("evaluation_protocol", "fair"))
         for key, widget in self.fields.items():
             setting = fields.get(key)
             if isinstance(widget, QComboBox):

@@ -23,8 +23,8 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.2/JINGWEI-Benchmark-Windows-Setup.exe"><strong>Download Windows Benchmark Installer (.exe)</strong></a> ·
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.2">Linux CLI</a>
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe"><strong>Download Windows Benchmark Installer (.exe)</strong></a> ·
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.3">Linux CLI</a>
 </p>
 
 Download one EXE and run it; the installer handles the remaining files. After installation, open **Start → JINGWEI Benchmark**.
@@ -36,7 +36,7 @@ JINGWEI is a deep learning framework for missing proteomic data imputation, supp
 | What you want to do | Use | Get started |
 | --- | --- | --- |
 | Apply **DMF / DCAE** to your data | JINGWEI Python package | [Quick start](#quick-start) · [Python API](#python-api-example) |
-| Compare **34 imputation methods** | Standalone JINGWEI Benchmark software | [Benchmark guide](software/benchmark/README.md) |
+| Compare **35 imputation methods** | Standalone JINGWEI Benchmark software | [Benchmark guide](software/benchmark/README.md) |
 
 ## Features
 
@@ -170,99 +170,42 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 ## Benchmark software
 
-[**Windows installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.2/JINGWEI-Benchmark-Windows-Setup.exe) · [Installation guide](software/benchmark/RELEASE-1.0.2.md) · [Linux CLI V1.0.2](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.2)
+[**Download Windows installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe) · [Installation](software/benchmark/RELEASE-1.0.3.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.3)
 
-The Windows installer automatically downloads and verifies the complete software.
-Install once, then open it from the Start menu. The desktop restores the last
-data file, methods, parameters, language and window layout, and reuses its
-environment check until the application, backends or GPU driver change.
-Choose an output folder for each run. Startup leaves results empty; **Open task…**
-opens a saved task folder. The **Log** tab shows live progress. MSE and an optional
-original benchmark model/training preset are available in the benchmark software.
+Install once and open **JINGWEI Benchmark** from the Start menu. Python, R,
+conda and method dependencies are bundled. The native Windows GUI supports
+**中文 / English** and loads the bundled `data/Alzheimer.csv` by default.
 
-Compare DMF/DCAE with PIMMS and traditional imputation methods using the standalone
-benchmark application. **Python, R, conda and method dependencies are bundled.**
+Choose data, methods, a protocol, output folder and device, then **Run**. GUI
+tasks run **once**; the repeat control has been removed. **Log** shows live
+progress. Startup leaves results empty; **Open task…** opens a saved task.
+Form preferences and the environment cache persist independently of results.
 
-The Windows interface supports **中文 / English** and opens the bundled
-`data/Alzheimer.csv` by default. JINGWEI uses optimized native PyTorch execution;
-the original Lightning runner remains available for comparison and replay.
-The benchmark CLI defaults to **all 34 methods and 5 repeats**, with a
-**30-minute timeout per method/repeat** (`--timeout 1800`); use `--methods`
-to select a subset. The GUI initially selects DMF and DCAE with the same timeout.
-MICE-PMM now defaults to a Python linear implementation with posterior draws
-and predictive mean matching, using all **5 imputations × 5 sweeps** and all
-predictors. The full default matrix completed in about **40 seconds** in the
-local CLI check. Select `--mice-backend r` for original R PMM; NAguideR
-MICE-Norm/CART remain R methods. Implementation details and timings are recorded
-in the [performance notes](software/benchmark/PERFORMANCE.md).
-PIMMS and iterative methods also have execution optimizations that retain
-their requested model budgets. Use **Advanced → Runtime → Baseline execution**
-or `--baseline-engine native` to compare against upstream execution.
+- **Original notebook replay** restores the old raw-CSV preprocessing,
+  `CSVDataset.get_mask()`, single mask, original methods and scoring. It
+  unconditionally discards the first column and uses pre-mask statistics.
+- **Fair benchmark** supports regular CSV/AnnData input, shared evaluation
+  masking followed by training masking, and normalization without evaluation
+  truth. The old custom quantile mechanism is labeled separately.
 
-| Platform | Interface | Status |
+New forms default to notebook replay; existing preferences keep their protocol.
+Historical scores are **not all reproduced** by restoring the source
+alone. Mask counts and deterministic scores are checked against the archived
+Alzheimer output; neural methods are also compared with direct execution of
+the old functions. Read the [replay protocol](software/benchmark/NOTEBOOK_REPLAY.md)
+and [verification report](software/benchmark/SE_TESTS.md) for results and limits.
+
+The CLI defaults to **all 35 methods, one evaluation**, with a **30-minute
+timeout per method**. Explicit CLI repeats remain available for fair evaluations.
+The default GUI selection is DMF/DCAE. Historical replay uses the original
+linear Python MICE; fair evaluation also offers Python/R MICE-PMM and the
+other R baselines. [User guide](software/benchmark/README.md).
+
+| Platform | Application | Compute |
 | --- | --- | --- |
-| Windows x86-64 | Native GUI + CLI installer | GUI workflows, installer and public CLI tested |
-| Linux x86-64 | CLI | Validated in WSL |
-| macOS arm64 / x86-64 | CLI, CPU only | Build configuration; not runtime-tested |
-
-[User guide](software/benchmark/README.md) · [Performance checks](software/benchmark/PERFORMANCE.md) · [Build documentation](software/benchmark/packaging/README.md)
-
-<details>
-<summary>Local software paths and validation</summary>
-
-Local builds are under `software/benchmark/dist/`:
-
-```text
-dist/
-├── v1.0.2-windows-x86_64/
-│   └── JINGWEI Benchmark/
-│       ├── JINGWEI Benchmark.exe    # GUI
-│       ├── jingwei-benchmark.exe    # CLI
-│       └── _internal/              # Shared runtime
-├── jingwei-benchmark-1.0.2-linux-x86_64.tar
-└── releases/
-    ├── v1.0.2/                    # Windows installers, Linux CLI and checksums
-    └── v1.0.0/                    # Linux CLI and original installers
-```
-
-Windows: download and run the single Windows installer EXE. The versioned EXE
-and BIN volumes remain available for offline installation. Linux: download all
-all V1.0.2 archive parts, its checksums and installer, then run `sh install-linux.sh`.
-See the [installation guide](software/benchmark/RELEASE-1.0.2.md).
-
-V1.0.2 regression checks: **166 passed on Windows**, **160 on WSL/Linux**.
-The Windows public CLI completed all **34 methods** on the integration fixture;
-the Linux offline bundle completed **34 CPU / 5 CUDA methods**. GUI reopen checks
-verify live logs, a custom output folder and empty results at startup while
-retaining form preferences and the runtime cache. See the [test report](software/benchmark/SE_TESTS.md).
-
-V1.0 validation on **2026-10-15**: all **34 methods** completed the CPU integration
-fixture; regression tests passed on Windows (**125**) and WSL/Linux (**120**).
-Those standalone bundles were checked with host conda/Python/R paths
-removed, using all **34 CPU methods** on the integration fixture and all
-**5 CUDA neural methods**.
-Linux was also tested outside the checkout, without Qt, with a cache path
-containing spaces. These are execution checks, not a scientific ranking or
-convergence test; see the performance notes for the full-data timing protocol.
-
-The V1.0 Windows installer was tested in a path containing spaces, including
-its Start menu shortcut, version registration, installed payload, Chinese/English
-GUI, native icons, public console and uninstall. The installed console and Linux
-CLI both passed all 34 CPU methods, five CUDA methods and full-data Python MICE.
-The previous console startup block did not recur in this installed V1.0 build.
-SeqKNN, ImpSeq and MLE report their expected unsupported-input reasons on the
-default Alzheimer matrix; QRILC and Python MICE complete on that same input.
-
-No macOS artifact has been produced or runtime-tested. Its CLI build must run on
-a Mac.
-
-V1.0.1 desktop upgrade and reopen checks passed on **2026-10-16**. Reopening
-restored the configuration and ran zero environment probes. The new standalone
-Windows console was blocked by this machine's Smart App Control (error 4551),
-so its execution is not validated here. The desktop GUI runs normally; the Linux
-CLI remains at V1.0. No system security settings were changed.
-
-</details>
+| Windows x86-64 | Native GUI + CLI installer | CPU / NVIDIA CUDA |
+| Linux x86-64 | Offline CLI, tested in WSL | CPU / NVIDIA CUDA |
+| macOS | CLI build configuration; no binary/runtime validation in this release | CPU only |
 
 ## Data Format
 
@@ -457,7 +400,7 @@ This project is licensed under the [PolyForm Noncommercial 1.0.0](https://polyfo
 ### Benchmark V1.0 (1.0.0)
 
 - Windows installer with Chinese/English GUI, CLI, original icon and uninstall.
-- Offline Linux CLI installer; all Python/R runtimes and 34 methods bundled.
+- Offline Linux CLI installer; all Python/R runtimes and 35 methods bundled.
 - Shared evaluation masks, second training mask, sample-distribution W2 and
   Python linear MICE-PMM; default method timeout is 30 minutes.
 - Application release only; the published Python package is unchanged.

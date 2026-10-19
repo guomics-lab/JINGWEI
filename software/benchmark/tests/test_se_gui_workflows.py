@@ -36,6 +36,8 @@ def window(tmp_path, monkeypatch):
               for name, spec in METHODS.items()}
     monkeypatch.setattr(BenchmarkWindow, 'refresh_environment', lambda self: self.apply_environment((states, False, None)))
     win = BenchmarkWindow(tmp_path / 'desktop', load_default=False)
+    set_value(win.fields['evaluation_protocol'], 'fair')
+    win.mode_changed()
     errors = []
     win.show_error = errors.append
     source = tmp_path / '用户 数据.csv'
@@ -45,7 +47,7 @@ def window(tmp_path, monkeypatch):
     win.set_input(source)
     until(app, lambda: win.preview_data is not None)
     win.select_methods(['mean', 'knn'])
-    set_value(win.fields['repeats'], 2)
+    assert 'repeats' not in win.fields
     set_value(win.fields['device'], 'cpu')
     yield app, win, source, errors
     for job in win.store.history():
@@ -100,17 +102,17 @@ def test_benchmark_plot_export_clone_then_imputation(window, tmp_path, monkeypat
     until(app, lambda: win.store.info(win.selected_job)['state'] in TERMINAL)
     win.refresh_jobs()
     info = win.store.info(win.selected_job)
-    assert info['state'] == 'completed' and info['done'] == 4
+    assert info['state'] == 'completed' and info['done'] == 2
     win.set_language('en')
     for metric in ('MSE', 'RMSE', 'MAE', 'NRMSE', 'Pearson', 'Spearman', 'W2', 'time_s'):
         win.metric_choice.setCurrentIndex(win.metric_choice.findData(metric))
-        assert len(win.plot.source) == 4
+        assert len(win.plot.source) == 2
     for extension, magic in [('png', b'\x89PNG'), ('pdf', b'%PDF'), ('svg', b'<?xml')]:
         target = tmp_path / ('图表.' + extension)
         monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *a, p=target, **kw: (str(p), ''))
         win.export_plot()
         assert target.read_bytes().startswith(magic)
-        assert len(pd.read_csv(target.with_suffix('.source.csv'))) == 4
+        assert len(pd.read_csv(target.with_suffix('.source.csv'))) == 2
         assert target.with_suffix('.provenance.json').is_file()
     archive = tmp_path / '任务.zip'
     monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *a, **kw: (str(archive), ''))
@@ -120,7 +122,8 @@ def test_benchmark_plot_export_clone_then_imputation(window, tmp_path, monkeypat
     with zipfile.ZipFile(archive) as exported:
         assert exported.testzip() is None
         assert 'results/report.html' in exported.namelist()
-        assert 'results/repeat_001/masks.npz' in exported.namelist()
+        assert 'results/repeat_000/masks.npz' in exported.namelist()
+        assert 'results/repeat_001/masks.npz' not in exported.namelist()
     win.clone_job()
     until(app, lambda: win.preview_data is not None)
     assert win.configuration()['methods'] == ['mean', 'knn']
@@ -142,7 +145,7 @@ def test_benchmark_plot_export_clone_then_imputation(window, tmp_path, monkeypat
 def test_close_running_job_defaults_no_then_confirmed_stop_is_durable(window):
     app, win, source, errors = window
     win.select_methods(['jingwei-dmf'])
-    for key, setting in {'max_epochs': 100000, 'batch_size': 4, 'latent_dim': 4, 'hidden_dims': '8', 'repeats': 1}.items():
+    for key, setting in {'max_epochs': 100000, 'batch_size': 4, 'latent_dim': 4, 'hidden_dims': '8'}.items():
         set_value(win.fields[key], setting)
     win.start_job()
     until(app, lambda: win.selected_job is not None)
@@ -172,7 +175,6 @@ def test_custom_output_manual_open_moved_task_and_live_log(window, tmp_path):
     sentinel.write_text('existing data')
     win.output_root.setText(str(output))
     win.select_methods(['mean'])
-    set_value(win.fields['repeats'], 1)
     win.start_job()
     until(app, lambda: win.selected_job is not None)
     until(app, lambda: win.store.info(win.selected_job)['state'] in TERMINAL)
@@ -220,3 +222,49 @@ def test_open_cli_result_and_invalid_folder_preserves_current_task(window, tmp_p
     assert (target / 'manifest.json').read_bytes() == before
     win.open_task(tmp_path)
     assert errors and win.selected_job == selected
+
+
+def test_notebook_gui_runs_one_exact_mask_and_disables_unused_options(window, tmp_path):
+    app, win, source, errors = window
+    from jingwei_benchmark.notebook_protocol import load_notebook_matrix, notebook_masks
+    win.fields['evaluation_protocol'].setCurrentIndex(win.fields['evaluation_protocol'].findData('original-notebook'))
+    until(app, lambda: win.preview_data is not None)
+    assert 'repeats' not in win.fields and win.configuration()['repeats'] == 1
+    for key in ('mask_rate', 'training_mask_rate', 'training_mechanism', 'low_quantile', 'max_epochs', 'header', 'index_column'):
+        assert not win.fields[key].isEnabled()
+    win.select_methods(['knn', 'feature-minimum'])
+    win.start_job()
+    until(app, lambda: win.selected_job is not None)
+    until(app, lambda: win.store.info(win.selected_job)['state'] in TERMINAL)
+    win.refresh_jobs()
+    info = win.store.info(win.selected_job)
+    assert info['state'] == 'completed' and info['done'] == 2 and not errors
+    actual = np.load(Path(info['folder']) / 'results/repeat_000/masks.npz')
+    expected, _ = notebook_masks(load_notebook_matrix(source, seed=win.configuration()['seed']))
+    np.testing.assert_array_equal(actual['evaluation_hidden'], expected.evaluation_hidden)
+    assert not actual['training_hidden'].any()
+    assert win.paired.isHidden() and win.result_table.isColumnHidden(0)
+    win.set_language('en')
+    assert 'single mask' in win.protocol_summary.text()
+    win.fields['evaluation_protocol'].setCurrentIndex(win.fields['evaluation_protocol'].findData('fair'))
+    win.fields['mechanism'].setCurrentIndex(win.fields['mechanism'].findData('mnar-jingwei-original'))
+    assert not win.fields['mask_rate'].isEnabled()
+    assert 'original probabilities' in win.protocol_summary.text()
+    win.fields['mechanism'].setCurrentIndex(win.fields['mechanism'].findData('mcar'))
+    assert win.fields['mask_rate'].isEnabled()
+
+
+def test_old_repeat_setting_cannot_reappear_in_new_gui_jobs(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    from jingwei_benchmark.gui_jobs import write_json
+    monkeypatch.setattr(BenchmarkWindow, 'refresh_environment', lambda self: None)
+    write_json(tmp_path / 'session.json', {'schema': 1, 'fields': {'repeats': 99, 'mechanism': 'mnar-jingwei'}, 'methods': ['knn']})
+    win = BenchmarkWindow(tmp_path, load_default=False)
+    try:
+        assert 'repeats' not in win.fields
+        win.backend_states = {'knn': {'available': True}}
+        assert win.configuration()['repeats'] == 1
+        assert win.configuration()['evaluation_protocol'] == 'fair'
+        assert win.fields['mechanism'].currentText() == 'MNAR · 分位数（自定义）'
+    finally:
+        win.close()

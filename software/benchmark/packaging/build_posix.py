@@ -39,6 +39,7 @@ def main():
         parser.error("use the dedicated jingwei_benchmark conda build environment")
     from conda_pack import CondaEnv, File
     from jingwei_benchmark.methods import availability, find_method_source
+    from jingwei_benchmark import __version__
     from jingwei_benchmark.cli import DEFAULT_TIMEOUT_SECONDS
     sources = {name: find_method_source(name) for name in ("NAguideR", "DreamAI")}
     rscript = prefix / "bin/Rscript"
@@ -112,8 +113,8 @@ def main():
     executable.write_text(launcher, encoding="utf-8", newline="\n")
     executable.chmod(0o755)
     shutil.copyfile(BUILD / "fix_r_runtime.py", output / "fix_r_runtime.py")
-    shutil.copyfile(APPLICATION / "README.md", output / "README.md")
-    shutil.copyfile(APPLICATION / "PERFORMANCE.md", output / "PERFORMANCE.md")
+    for name in ("README.md", "PERFORMANCE.md", "NOTEBOOK_REPLAY.md", "SE_TESTS.md", f"RELEASE-{__version__}.md"):
+        shutil.copyfile(APPLICATION / name, output / name)
     shutil.copyfile(APPLICATION / "LICENSE", output / "LICENSE")
     versions = {name: metadata.version(name) for name in ("torch", "fastai", "pimms-learn", "scikit-learn", "numpy", "scipy", "pandas", "anndata")}
     r_version = subprocess.run([str(rscript), "--version"], capture_output=True, text=True, check=True)
@@ -123,6 +124,8 @@ def main():
             "gui_included": False, "build_libc": platform.libc_ver(), "method_count": len(states),
             "default_baseline_engine": "optimized",
             "default_benchmark_methods": "all",
+            "default_benchmark_repeats": 1,
+            "notebook_source_revision": "98686b54fdb9918a4d4cc9d99ac4880a6dadcefe",
             "default_timeout_s": DEFAULT_TIMEOUT_SECONDS,
             "default_mice_backend": "python-linear-mice-pmm",
             "macos_runtime_validated": False}

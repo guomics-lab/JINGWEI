@@ -47,7 +47,7 @@ def test_reopen_restores_form_and_skips_environment_probe(tmp_path, monkeypatch)
     until(app, lambda: first.preview_data is not None and bool(first.backend_states))
     first.set_language("en")
     first.select_methods(["mean", "knn"])
-    for key, setting in {"device": "cpu", "repeats": 3, "mask_rate": .15, "seed": 91, "hidden_dims": "32, 16"}.items():
+    for key, setting in {"device": "cpu", "mask_rate": .15, "seed": 91, "hidden_dims": "32, 16"}.items():
         set_value(first.fields[key], setting)
     first.job_name.setText("Remember this run")
     first.method_parameters = {"knn": {"k": 3}}
@@ -91,6 +91,29 @@ def test_late_environment_probe_cannot_replace_new_settings(tmp_path, monkeypatc
     window.close()
 
 
+def test_protocol_switch_reuses_environment_and_restores_backend_availability(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    import jingwei_benchmark.gui_environment as environment
+    calls = []
+    def probe(options, **kwargs):
+        calls.append(dict(options))
+        result = states()
+        result['missforest'].update(available=False, reason='R package missing')
+        return result, False, None
+    monkeypatch.setattr(environment, 'inspect_environment', probe)
+    window = BenchmarkWindow(tmp_path, load_default=False)
+    until(app, lambda: bool(window.backend_states))
+    assert window.backend_states['missforest']['available']
+    assert window.backend_states['missforest']['backend'] == 'python'
+    window.fields['evaluation_protocol'].setCurrentIndex(window.fields['evaluation_protocol'].findData('fair'))
+    assert not window.backend_states['missforest']['available']
+    assert window.backend_states['missforest']['backend'] == 'r'
+    window.fields['evaluation_protocol'].setCurrentIndex(window.fields['evaluation_protocol'].findData('original-notebook'))
+    assert window.backend_states['missforest']['available']
+    assert len(calls) == 1 and window._environment_probe_count == 1
+    window.close()
+
+
 def test_missing_saved_input_and_invalid_fields_do_not_reset_to_demo(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
     monkeypatch.setattr(BenchmarkWindow, "refresh_environment", lambda self: None)
@@ -101,7 +124,7 @@ def test_missing_saved_input_and_invalid_fields_do_not_reset_to_demo(tmp_path, m
     assert window.input_path.text() == str(source)
     assert window.preview_data is None
     assert not window.start_button.isEnabled()
-    assert window.fields["repeats"].value() == 5
+    assert "repeats" not in window.fields
     window.close()
 
 
@@ -127,7 +150,7 @@ def test_startup_does_not_open_legacy_job_or_restore_its_parameters(tmp_path, mo
     window = BenchmarkWindow(tmp_path)
     until(app, lambda: bool(window.backend_states))
     assert window.selected_job is None
-    assert window.configuration()["seed"] == 42
+    assert window.configuration()["seed"] == 0
     assert window.method_parameters == {}
     assert Path(window.input_path.text()) != folder / "input.csv"
     assert not hasattr(window, "job_combo")

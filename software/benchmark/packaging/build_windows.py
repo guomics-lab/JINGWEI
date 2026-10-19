@@ -28,6 +28,7 @@ def main():
     if not (APPLICATION / "LICENSE").is_file():
         parser.error("missing benchmark application LICENSE")
     from jingwei_benchmark.methods import availability, find_method_source
+    from jingwei_benchmark import __version__
     from jingwei_benchmark.cli import DEFAULT_TIMEOUT_SECONDS
     states = availability(source_dir=find_method_source("NAguideR"), dreamai_source=find_method_source("DreamAI"))
     if missing := [name for name, state in states.items() if not state["available"]]:
@@ -39,7 +40,7 @@ def main():
     artifact = output / "JINGWEI Benchmark/JINGWEI Benchmark.exe"
     console = output / "JINGWEI Benchmark/jingwei-benchmark.exe"
     distribution = artifact.parent
-    for name in ("README.md", "PERFORMANCE.md"):
+    for name in ("README.md", "PERFORMANCE.md", "NOTEBOOK_REPLAY.md", "SE_TESTS.md", f"RELEASE-{__version__}.md"):
         shutil.copyfile(APPLICATION / name, distribution / name)
     shutil.copyfile(APPLICATION / "LICENSE", distribution / "LICENSE")
     for name in ("NAguideR", "DreamAI"):
@@ -49,7 +50,7 @@ def main():
                 target = distribution / "licenses" / name / file.name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(file, target)
-    versions = {name: importlib.metadata.version(name) for name in ("torch", "fastai", "pimms-learn", "scikit-learn", "PySide6-Essentials", "pyinstaller", "pandas", "numpy", "scipy", "anndata")}
+    versions = {name: importlib.metadata.version(name) for name in ("torch", "fastai", "pimms-learn", "plum-dispatch", "scikit-learn", "PySide6-Essentials", "pyinstaller", "pandas", "numpy", "scipy", "anndata")}
     with artifact.open("rb") as handle:
         executable_hash = hashlib.file_digest(handle, "sha256").hexdigest()
     from jingwei_benchmark import __version__
@@ -61,6 +62,8 @@ def main():
             "default_jingwei_engine": "torch",
             "default_baseline_engine": "optimized",
             "default_benchmark_methods": "all",
+            "default_benchmark_repeats": 1, "default_gui_protocol": "original-notebook",
+            "notebook_source_revision": "98686b54fdb9918a4d4cc9d99ac4880a6dadcefe",
             "default_timeout_s": DEFAULT_TIMEOUT_SECONDS,
             "default_mice_backend": "python-linear-mice-pmm",
             "console_sha256": hashlib.sha256(console.read_bytes()).hexdigest(),

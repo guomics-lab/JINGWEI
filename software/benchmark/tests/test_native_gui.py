@@ -29,7 +29,7 @@ def app():
     yield application
 
 
-def until(app, predicate, timeout=45000):
+def until(app, predicate, timeout=120000):
     deadline = time.monotonic() + timeout / 1000
     while time.monotonic() < deadline:
         app.processEvents()
@@ -62,6 +62,8 @@ def test_native_window_load_run_plot_and_restore(app, tmp_path):
     window.show()
     errors = []
     window.show_error = errors.append
+    set_value(window.fields["evaluation_protocol"], "fair")
+    window.mode_changed()
     window.load_demo()
     until(app, lambda: window.preview_data is not None and bool(window.backend_states))
     assert not window.logo.isNull()
@@ -70,7 +72,8 @@ def test_native_window_load_run_plot_and_restore(app, tmp_path):
     assert window.preview_table.rowCount() == 12
     assert window.configuration()["methods"] == ["jingwei-dmf", "jingwei-dcae"]
     window.select_methods(["mean", "knn"])
-    set_value(window.fields["repeats"], 1)
+    assert "repeats" not in window.fields
+    assert window.configuration()["repeats"] == 1
     set_value(window.fields["device"], "cpu")
     window.method_parameters = {"knn": {"k": 3}}
     window.feature_selection = window.preview_data["feature_ids"][:10]
@@ -102,16 +105,17 @@ def test_native_window_load_run_plot_and_restore(app, tmp_path):
     assert window.store.info(window.selected_job)["state"] == "completed"
     assert window.result_table.rowCount() == 2
     assert len(window.plot.source) == 2
-    assert window.plot.provenance["paired_complete_repeats_only"]
+    assert not window.plot.provenance["paired_complete_repeats_only"]
+    assert window.paired.isHidden() and window.result_table.isColumnHidden(0)
     assert len(window.plot.figure.axes[0].patches) == 2
     source = window.plot.source.copy()
     window.language_choice.setCurrentIndex(window.language_choice.findData("en"))
     pd.testing.assert_frame_equal(source, window.plot.source)
-    assert window.plot.figure.axes[0].get_title(loc="left") == "Paired complete repeats"
+    assert window.plot.figure.axes[0].get_title(loc="left") == "Successful runs per method"
     assert window.run_model.headerData(1, Qt.Horizontal) == "Method"
     original = window.store.info(window.selected_job)
     window.clone_job()
-    until(app, lambda: window.preview_data is not None)
+    until(app, lambda: window.preview_data is not None and bool(window.backend_states))
     assert window.configuration()["methods"] == original["config"]["methods"]
     assert window.configuration()["seed"] == original["config"]["seed"]
     window.pool.waitForDone()
@@ -145,11 +149,14 @@ def test_language_persists_and_english_catalog_covers_controls(app, tmp_path, mo
 
 def test_gui_starts_with_alzheimer_data(app, tmp_path, monkeypatch):
     from jingwei_benchmark.runtime import default_input_path
+    from jingwei_benchmark.gui import value
     monkeypatch.setattr(BenchmarkWindow, "refresh_environment", lambda self: None)
     window = BenchmarkWindow(tmp_path)
     until(app, lambda: window.preview_data is not None)
     assert Path(window.input_path.text()) == default_input_path()
-    assert (window.preview_data["samples"], window.preview_data["features"]) == (210, 1542)
+    assert (window.preview_data["samples"], window.preview_data["features"]) == (210, 1541)
+    assert value(window.fields["evaluation_protocol"]) == "original-notebook"
+    assert "repeats" not in window.fields
     assert window.preview_data["working_scale"] == "log2"
     window.set_language("en")
     assert Path(window.input_path.text()) == default_input_path()

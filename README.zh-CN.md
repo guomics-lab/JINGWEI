@@ -23,8 +23,8 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.2/JINGWEI-Benchmark-Windows-Setup.exe"><strong>下载 Windows 软件安装包（.exe）</strong></a> ·
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.2">Linux CLI</a>
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe"><strong>下载 Windows 软件安装包（.exe）</strong></a> ·
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.3">Linux CLI</a>
 </p>
 
 只需下载一个 EXE 并运行，其余文件由安装程序自动获取。安装后从 **开始菜单 → JINGWEI Benchmark** 打开软件。
@@ -36,7 +36,7 @@ JINGWEI 是一个用于蛋白质组数据缺失值插补的深度学习框架，
 | 你的需求 | 使用产品 | 开始使用 |
 | --- | --- | --- |
 | 用 **DMF / DCAE** 处理自己的数据 | JINGWEI Python 包 | [快速开始](#快速开始) · [Python API](#python-api-示例) |
-| 比较 **34 种插补方法** | 独立的 JINGWEI Benchmark 软件 | [Windows 安装包](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.2/JINGWEI-Benchmark-Windows-Setup.exe) · [使用指南](software/benchmark/README.md) |
+| 比较 **35 种插补方法** | 独立的 JINGWEI Benchmark 软件 | [Windows 安装包](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe) · [使用指南](software/benchmark/README.md) |
 
 ## 功能
 
@@ -170,67 +170,24 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 ## Benchmark 软件
 
-[**下载 Windows 安装包（.exe）**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.2/JINGWEI-Benchmark-Windows-Setup.exe) · [安装说明](software/benchmark/RELEASE-1.0.2.md) · [Linux CLI V1.0.2](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.2)
+[**下载 Windows 安装包（.exe）**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe) · [安装说明](software/benchmark/RELEASE-1.0.3.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.3)
 
-Windows 安装程序会自动下载并校验完整软件。安装一次后，从开始菜单启动即可。软件会恢复上次的数据、方法、参数、语言和窗口布局，并复用计算环境检查结果；软件、后端或显卡驱动变化时才重新检查。
+安装一次后，从开始菜单打开 **JINGWEI Benchmark**。Python、R、conda 及各方法依赖均已打包，无需另装。Windows 原生界面支持 **中文 / English**，默认加载内置的 `data/Alzheimer.csv`。
 
-运行前可自定义**输出目录**，每次生成独立任务文件夹。启动时不载入旧结果，通过**打开任务…**手动查看，**日志**页实时显示进度。新增 **MSE** 指标和可选的原始 benchmark 模型／训练参数预设；不同缺失机制下的方法排名可能不同。
+选择数据、方法、评测方案、输出目录和设备后，点击 **开始**。GUI **每次只运行一次**，已删除重复次数选项。**日志**实时显示进度；启动时结果为空，通过 **打开任务…**手动查看。表单设置和环境检查缓存独立保留。
 
-使用独立软件比较 DMF/DCAE、PIMMS 和传统插补方法。**Python、R、conda 运行环境及各方法依赖均已打包。**
+- **原 notebook 回放**：恢复旧 CSV 预处理、`CSVDataset.get_mask()`、单次掩蔽、原方法和评分流程。它会无条件丢弃第一列，并使用掩蔽前统计量。
+- **公平评测**：支持常规 CSV／AnnData，先统一构造评测掩蔽，再从剩余观测值构造训练掩蔽；标准化不使用评测真值。此前的自定义分位数机制单独标注。
 
-Windows 界面支持 **中文 / English**，默认加载内置的 `data/Alzheimer.csv`。JINGWEI 默认使用优化后的原生 PyTorch 训练方式，也保留 Lightning 方式供比较和复现。
+新表单默认使用原 notebook 回放；已有配置保留其评测方案。**恢复原代码不等于旧分数全部重现**。阿尔兹海默数据的掩蔽数量一致，9 个旧 MSE 中 6 个与原显示精度一致；MF、DAE、DCAE 仍有差异。另通过本机直接执行旧函数交叉检查神经方法。结果和差异见[回放说明](software/benchmark/NOTEBOOK_REPLAY.md)和[测试报告](software/benchmark/SE_TESTS.md)。
 
-CLI 默认评测 **全部 34 种方法、重复 5 次**，**每种方法每次重复超时 30 分钟**（`--timeout 1800`）。可用 `--methods` 选择部分方法。GUI 默认选择 DMF 和 DCAE，超时设置相同。
+CLI 默认评测 **全部 35 种方法、单次运行**，每种方法默认超时 **30 分钟**。CLI 仍可显式指定多次公平评测。GUI 默认勾选 DMF 和 DCAE。历史回放使用原 Python 线性 MICE；公平方案另有 Python／R MICE-PMM 及其他 R 方法。详见[用户指南](software/benchmark/README.md)。
 
-MICE-PMM 默认使用 Python 线性模型实现，通过后验抽样和预测均值匹配进行插补，保留 **5 次插补 × 5 轮更新**及全部预测变量。本地 CLI 检查中，完整默认矩阵约需 **40 秒**。使用 `--mice-backend r` 可切换至原始 R PMM；NAguideR 的 MICE-Norm/CART 仍使用 R 实现。实现细节和耗时见[性能说明（英文）](software/benchmark/PERFORMANCE.md)。
-
-PIMMS 和迭代方法也进行了执行优化，保留用户指定的模型计算规模。可在 **高级设置 → 运行环境 → 对比方法执行方式** 中选择原生执行，或使用 `--baseline-engine native`，与上游执行方式比较。
-
-| 平台 | 界面与安装方式 | 验证状态 |
+| 平台 | 软件 | 计算设备 |
 | --- | --- | --- |
-| Windows x86-64 | 原生 GUI + CLI 安装包 | 已测试 GUI 流程、安装包和公开 CLI |
-| Linux x86-64 | CLI | 已在 WSL 中验证 |
-| macOS arm64 / x86-64 | CLI，仅 CPU | 提供构建配置，尚未完成运行验证或发布安装包 |
-
-**Windows 安装**：下载并运行一个 Windows 安装 EXE 即可；需要离线安装时，仍可下载带版本号的 EXE 和 BIN 分卷。
-
-**Linux 安装**：将全部归档分卷、对应校验文件和 `install-linux.sh` 下载到同一文件夹，再运行 `sh install-linux.sh`。
-
-[用户指南（英文）](software/benchmark/README.md) · [性能检查（英文）](software/benchmark/PERFORMANCE.md) · [构建文档（英文）](software/benchmark/packaging/README.md)
-
-<details>
-<summary>本地软件路径与验证详情</summary>
-
-本地构建结果位于 `software/benchmark/dist/`：
-
-```text
-dist/
-├── v1.0.2-windows-x86_64/
-│   └── JINGWEI Benchmark/
-│       ├── JINGWEI Benchmark.exe    # GUI
-│       ├── jingwei-benchmark.exe    # CLI
-│       └── _internal/              # 共享运行环境
-├── jingwei-benchmark-1.0.2-linux-x86_64.tar
-└── releases/
-    ├── v1.0.2/                    # Windows 安装程序、Linux CLI 与校验文件
-    └── v1.0.0/                    # Linux CLI 与原版安装程序
-```
-
-**2026-10-15 验证记录**：CPU 集成测试中的 **34 种方法**全部完成；Windows 回归测试 **125 项通过**，WSL/Linux **120 项通过**。独立软件包在移除宿主 conda/Python/R 路径后，完成了全部 **34 种方法的 CPU 检查**和 **5 种神经方法的 CUDA 检查**。
-
-**V1.0.2 验证记录**：Windows 回归 **166 项通过**，WSL/Linux **160 项通过**。Windows 公开 CLI 在集成样例上完成全部 **34 种方法**；Linux 离线软件包通过 **34 种 CPU 方法和 5 种 CUDA 方法**检查。后台 GUI 重开测试确认日志更新、自定义输出目录、启动时结果为空，并保留表单设置与环境缓存。详见[测试报告](software/benchmark/SE_TESTS.md)。
-
-Linux 还在仓库目录之外、带空格的缓存路径中进行了验证，且不包含 Qt。这些检查用于确认软件可运行，不代表方法的科学排名或训练已收敛；完整数据的计时方式见性能说明。
-
-V1.0 Windows 安装程序已在带空格的路径中验证，涵盖开始菜单快捷方式、版本注册、安装文件、中英文 GUI、原生图标、公开 CLI 和卸载。安装后的 Windows CLI 与 Linux CLI 均通过全部 34 种方法的 CPU 检查、5 种方法的 CUDA 检查，以及完整默认数据上的 Python MICE 检查。此前的控制台启动拦截在安装后的 V1.0 中未再次出现。
-
-在默认 Alzheimer 矩阵上，SeqKNN、ImpSeq 和 MLE 会明确报告输入不适用的原因；QRILC 和 Python MICE 可在同一输入上完成运行。
-
-尚未生成或运行验证 macOS 安装包；macOS CLI 必须在 Mac 上构建。
-
-**2026-10-16，V1.0.1 桌面验证**：升级和重开检查通过，配置完整恢复，重开时环境探测进程为零。新版独立 Windows CLI 被本机 Smart App Control 拦截（错误 4551），因此尚未通过本机运行验证；桌面 GUI 正常运行，Linux CLI 继续使用 V1.0。未更改系统安全设置。
-
-</details>
+| Windows x86-64 | 原生 GUI + CLI 安装包 | CPU / NVIDIA CUDA |
+| Linux x86-64 | 离线 CLI，在 WSL 中测试 | CPU / NVIDIA CUDA |
+| macOS | 提供 CLI 构建配置；本次无二进制及运行验证 | 仅 CPU |
 
 ## 数据格式
 
@@ -412,7 +369,7 @@ JINGWEI/
 ### Benchmark V1.0（1.0.0）
 
 - Windows 安装包包含中英文 GUI、CLI、原始图标和卸载功能。
-- 提供 Linux 离线 CLI 安装程序，打包全部 Python/R 运行环境和 34 种方法。
+- 提供 Linux 离线 CLI 安装程序，打包全部 Python/R 运行环境和 35 种方法。
 - 共享评测掩蔽、第二次训练掩蔽、多变量样本分布 W2 和 Python 线性 MICE-PMM；每方法每次重复默认超时 30 分钟。
 - 本次为独立软件发布，不重新发布已发布的 Python 包。
 

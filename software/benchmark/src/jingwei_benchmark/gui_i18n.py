@@ -1,6 +1,15 @@
 """Small, explicit desktop message catalog; method IDs and saved data stay stable."""
 
 MESSAGES = {
+    "评测方案": "Protocol", "原 notebook 回放": "Original notebook replay",
+    "公平评测（两次掩蔽）": "Fair benchmark (two masks)",
+    "原 notebook：单次掩蔽 · 种子 {seed}": "Original notebook: single mask · Seed {seed}",
+    "原 notebook 回放：CSV 首列丢弃，正值 log2，掩蔽前统计量，单次掩蔽，排除全空蛋白列评分。": "Original notebook: discard first CSV column, log2 positive values, pre-mask statistics, one mask; exclude empty protein columns when scoring.",
+    "MNAR · JINGWEI（原仓库）": "MNAR · JINGWEI (original repo)",
+    "MNAR · 分位数（自定义）": "MNAR · Quantile (custom)",
+    "原仓库规则保留 get_mask() 的历史尺度比较、严格区间和固定概率；不做比例校准或边际修复。": "Original get_mask(): historical scale comparison, strict bands and fixed probabilities; no rate calibration or marginal repair.",
+    "训练掩蔽：原仓库概率 · 种子 {seed}": "Training: original probabilities · Seed {seed}",
+    "训练掩蔽：未校准概率 · 种子 {seed}": "Training: uncalibrated probabilities · Seed {seed}",
     "任务目录无法读取，请重新打开任务。": "Task folder cannot be read. Open the task again.",
     "JINGWEI 参数预设": "JINGWEI parameter preset", "通用设置": "Common settings",
     "原始 benchmark 参数": "Original benchmark parameters", "掩蔽预测器维度": "Mask predictor dimension",

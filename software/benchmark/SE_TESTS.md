@@ -1,51 +1,113 @@
-# V1.0.2 software verification
+# V1.0.3 software verification
 
-Validation date: 2026-10-16. Windows 11 and Ubuntu under WSL2, using the dedicated
-`jingwei_benchmark` conda build environments. The released applications bundle
-their runtimes; end users do not need those environments.
+Validation date: 2026-10-19. Windows 11 and Ubuntu/WSL2, in separate
+`jingwei_benchmark` conda build environments. End users receive bundled runtimes.
+
+## Regression and packaged execution
 
 | Check | Result |
 | --- | --- |
-| Windows application regression suite | 166 passed, 2 skipped |
-| WSL/Linux application regression suite | 160 passed, 8 skipped |
-| Windows public standalone CLI, host runtime paths removed | 34/34 CPU methods completed |
-| Windows desktop's isolated worker path | 34/34 CPU and 5/5 CUDA methods completed |
-| Linux standalone CLI, outside the checkout, host runtime paths removed | 34/34 CPU and 5/5 CUDA methods completed |
-| Windows packaged GUI components, cold launch and reopen | Both languages; live logs; chosen output; empty initial results; warm environment cache |
-| Windows executable source snapshot | All 36 application modules match current source |
-| Windows offline installer upgrade | V1.0.1 → V1.0.2; installed executable matches build; application closing disabled |
-| Windows uninstallation | Owned test install/registration removed; prior shortcuts restored; external task results preserved |
-| Linux split-archive installer | Checksums, fresh runtime, default input, command symlink and duplicate-install protection passed |
+| Windows full application regression suite | 184 passed, 2 skipped |
+| WSL/Linux full application regression suite | 178 passed, 8 skipped |
+| Latest focused notebook, session and GUI checks | 26 passed |
+| Frozen Windows source snapshot | All 52 application modules match current source |
+| Windows public standalone console, host runtime paths removed | 35/35 CPU methods completed |
+| Packaged Windows GUI job runner, sequential clean-host-path retry | 35/35 CPU and 5/5 CUDA; sparse AnnData; mask variants; ZIP export passed |
+| Linux offline CLI outside checkout, host paths removed, cache path with spaces | 35/35 CPU and 5/5 CUDA methods completed; no Qt |
+| Packaged Windows Qt offscreen cold/reopen workflow | Both languages; single task; live logs; custom output; empty initial results |
+| Packaged Windows warm reopen | 1.234 seconds to ready; cached environment, zero probe processes |
+| Windows frozen full Alzheimer replay, eight-method subset | All completed; identical mask/scoring counts; all six matching archived MSE values retained |
 
-User journeys cover CSV header/ID detection (including zero-padded numeric IDs),
-blank lines/BOM, invalid inputs and resource limits, sparse AnnData layers,
-benchmark and imputation, method selection/configuration, two disjoint shared
-masks, four missingness mechanisms, repeats and deterministic replay, all metric
-plots, PNG/PDF/SVG exports and provenance, complete task ZIP exports, cancellation,
-close confirmation, manual opening of GUI/CLI results, moved/deleted folders,
-read-only opening and preference/environment-cache persistence. Stale asynchronous
-preview/probe results and transient Windows JSON replacement locks are covered.
+The focused checks include an additional environment-cache case after the full
+suite: switching protocols changes Python/R method availability without another
+heavy probe. GUI repeat controls are absent, old repeat preferences cannot change
+new tasks, and legacy multi-run result files remain readable. CSV/AnnData import,
+mask separation, metric formulas, logging, cancellation, exports, moved tasks and
+preference/cache persistence retain their regression coverage.
 
-Method integration fixtures use 16 samples × 80 proteins and reduced neural
-budgets (one epoch, small dimensions). They verify software execution, device
-selection, masking and output integrity, not convergence or a scientific ranking.
-Full Alzheimer input is separately checked with QRILC/Python MICE and the explicit
-unsupported-input outcomes of SeqKNN, ImpSeq and MLE. Failed/unsupported attempts
-remain visible and are excluded from paired complete-repeat comparisons.
+Initial simultaneous first-launch checks encountered Python-DLL load failures
+in several processes, while the public console completed all 35 methods. Both
+executables subsequently started normally; sequential GUI/backend checks are
+retained separately. The DLL matches the build environment's SHA256. The cause
+of the initial load failures is not established. No system application-control
+settings were changed. PIMMS uses the same-version official pure-Python
+`plum-dispatch` wheel on Windows after a compiled dependency load was blocked.
 
-PyTorch/Lightning outputs, gradients and optimizer steps retain their parity
-checks. R/native execution and accelerated loaders retain independent comparisons.
-MSE is checked against RMSE² on the common evaluation mask. Original model/training
-presets are checked without changing evaluation or training masks.
+## Complete Alzheimer notebook replay
 
-To avoid interfering with an active user window, the latest packaged GUI journey
-ran through Qt's offscreen platform. Native Windows desktop/taskbar interaction
-was not repeated in this session. macOS has platform-policy tests but no runtime
-or binary validation. No system application-control settings were changed.
+The comparison uses the raw bundled Alzheimer CSV, seed 0, original preprocessing,
+model/baseline defaults and single mask. The historical source is pinned to commit
+`98686b54fdb9918a4d4cc9d99ac4880a6dadcefe`. All nine original methods completed on
+the full input; MissForest required 2808.9 seconds (46.8 minutes), so this diagnostic
+explicitly allowed 5400 seconds. The application default remains 1800 seconds.
 
-The first Linux release test exhausted the test machine's 32 GB `/tmp` memory
-filesystem while retaining multiple archives. Owned test copies were removed,
-tests moved to persistent storage and the complete suite/standalone checks rerun.
-Release parts are generated only from the finished archive and verified by the
-offline installer. Raw test logs, JUnit XML, configurations, masks and diagnostics
-remain in the local ignored `results/se-qa/` directory.
+| Mask property | Archived output | Current replay |
+| --- | ---: | ---: |
+| Samples × proteins | 210 × 1541 | 210 × 1541 |
+| Initial observed entries | 254968 | 254968 |
+| Dynamic holdouts | 229546 | 229546 |
+| Remaining observations | 25422 | 25422 |
+| Empty columns after masking | 20 | 20 |
+| Scored entries after empty-column exclusion | 229401 | 229401 |
+| Second training mask | None | None |
+
+| Method | Archived MSE, printed precision | Current MSE | Printed value reproduced |
+| --- | ---: | ---: | --- |
+| MissForest (original Python) | 0.607 | 0.601493 | No |
+| PIMMS VAE | 0.613 | 0.612827 | Yes |
+| KNN | 0.674 | 0.673630 | Yes |
+| NMF | 250.693 | 250.693451 | Yes |
+| PIMMS DAE | 0.640 | 0.634120 | No |
+| Per-protein MIN | 2.738 | 2.737587 | Yes |
+| MICE (original linear Python) | 0.816 | 0.815853 | Yes |
+| DMF | 0.595 | 0.595042 | Yes |
+| DCAE | 1.200 | 1.416695 | No |
+
+**Six of nine archived MSE values match at the saved precision. All historical
+scores have not been reproduced.** Parameters and scoring are retained; the
+three differences are visible, not replaced with archived numbers.
+
+For an independent control, the historical notebook's actual function definitions
+were extracted from Git and executed on this same machine, with the same selected
+eight-method subset (the separate full MissForest run is above). Portability
+changes close the temporary CSV before writing on Windows and use two persistent
+workers instead of twenty. This direct execution gives VAE 0.612827, DAE 0.634120,
+DMF 0.594809 and DCAE 1.416685. The application subset gives 0.612827, 0.634120,
+0.595042 and 1.416681, respectively. CPU RNG state before both native model
+constructors matches the independent reference byte for byte. Unit tests also
+check identical original losses, gradients and predictions when evaluation
+targets are withheld from the worker.
+
+These controls verify the restored source workflow and identify unresolved
+historical-run differences. The archived notebook does not provide a complete
+runtime/weight/random-state snapshot, so a claim that every saved neural score
+has been recovered would be unsupported. The old notebook only reported MSE
+and runtime; additional MAE/RMSE/NRMSE/correlation/W2 values have no archived
+counterpart. Timings depend on hardware and process boundaries. Sample W2 is
+undefined on all proteins here because no original sample is complete; it stays
+empty unless a suitable common reference feature subset is selected.
+
+## Scope
+
+The fair protocol retains evaluation E followed by training T, with no evaluation
+truth in fitting statistics or workers. The historical profile intentionally
+retains first-column dropping, pre-mask statistics, mixed-scale thresholds,
+strict boundary holes, full-mask BCE, shuffled DMF behavior and old score
+filtering. Both profiles save masks, settings, versions and scoring counts.
+
+The frozen eight-method replay ran outside the checkout with host Python/R/conda
+paths removed, using the complete Alzheimer matrix and original training budgets.
+MissForest was checked in the separate full nine-method source run above; its
+46.8-minute run was not repeated for the frozen distribution. The packaged replay
+retains the DAE/DCAE differences rather than substituting historical values.
+
+Packaged method integration fixtures use reduced neural budgets to check
+execution rather than convergence. Full Alzheimer source replay uses the actual
+50 native / 200 requested PIMMS epochs. Windows GUI tests are offscreen to avoid
+interfering with an active user window; physical desktop/taskbar interactions
+and installer registration are not repeated in this session. macOS has platform
+policy checks but no runtime/binary validation. The published Python package
+and the user's existing application/window are unchanged by these checks.
+
+Raw JUnit files, configurations, complete method results, old-function controls,
+logs and screenshots remain in the ignored local `results/se-qa/` directory.

@@ -57,6 +57,8 @@ def main():
     guide = APPLICATION / f"RELEASE-{__version__}.md"
     shutil.copyfile(guide if guide.exists() else APPLICATION / "RELEASE-1.0.md", output / f"INSTALL-{__version__}.md")
     shutil.copyfile(APPLICATION / "LICENSE", output / "LICENSE.txt")
+    for name in ("NOTEBOOK_REPLAY.md", "SE_TESTS.md"):
+        shutil.copyfile(APPLICATION / name, output / name)
     print("Linux parts:", *(name for name, _ in parts), sep="\n")
 
 

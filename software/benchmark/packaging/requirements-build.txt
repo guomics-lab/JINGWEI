@@ -9,6 +9,8 @@ pandas>=2.0,<3
 numpy>=1.24,<3
 pimms-learn==0.5.2
 fastai==2.8.12
+# Pin the official universal Python wheel, avoiding optional native dispatch DLLs.
+plum-dispatch @ https://files.pythonhosted.org/packages/64/a7/ee4d01d26032b060d379f44a29124180f756d907e3840d3bc450f8a0d2a7/plum_dispatch-2.9.0-py3-none-any.whl#sha256=5a516cdac5460343937a2b813562ac00b0eeac973ac023916e538610bdf34397
 scikit-learn==1.6.1
 anndata>=0.10,<0.14
 tzdata

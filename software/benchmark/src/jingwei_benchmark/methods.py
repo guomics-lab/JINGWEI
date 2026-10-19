@@ -40,6 +40,7 @@ _NATIVE = (
     "knn",
     "iterative-ridge",
     "iterative-rf",
+    "nmf",
     "mice-pmm",
 )
 _R = {
@@ -152,11 +153,16 @@ def r_environment(library=None):
 def availability(
     rscript=None, r_library=None, source_dir=None, dreamai_source=None, names=None,
     mice_backend="python",
+    evaluation_protocol="fair",
 ):
     selected = dict(METHODS) if names is None else {name: METHODS[name] for name in names}
+    if evaluation_protocol == "original-notebook":
+        for name in ("missforest", "mice-pmm"):
+            if name in selected:
+                selected[name] = MethodSpec(name, "python")
     if mice_backend not in ("python", "r"):
         raise ValueError("MICE backend must be python or r")
-    if mice_backend == "r" and "mice-pmm" in selected:
+    if mice_backend == "r" and "mice-pmm" in selected and evaluation_protocol != "original-notebook":
         selected["mice-pmm"] = MethodSpec("mice-pmm", "r", packages=("mice",))
     rscript = find_rscript(rscript)
     packages = sorted(
@@ -336,6 +342,11 @@ def run_method(
             prediction = KNNImputer(
                 n_neighbors=params.get("k", 5), keep_empty_features=True
             ).fit_transform(matrix)
+        elif name == "nmf":
+            from .nmf_engine import run_nmf
+            if not available.any(axis=0).all():
+                raise MethodInputError("NMF requires at least one observation per feature")
+            prediction = run_nmf(np.where(available, matrix, 0), available.astype(float))
         else:
             from sklearn.ensemble import RandomForestRegressor
             from .iterative_engine import make_imputer

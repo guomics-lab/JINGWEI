@@ -177,14 +177,14 @@ def load_matrix(
 
 
 def write_predictions(
-    data, values, folder, *, method, input_scale, output_scale="input"
+    data, values, folder, *, method, input_scale, output_scale="input", allow_nonfinite=False
 ):
     folder = Path(folder)
     output_values = np.asarray(values, dtype=float).copy()
     if output_scale == "input" and input_scale == "raw" and data.scale == "log2":
         with np.errstate(over="ignore", invalid="ignore"):
             output_values = np.exp2(output_values)
-    if not np.isfinite(output_values).all():
+    if not allow_nonfinite and not np.isfinite(output_values).all():
         raise ValueError("nonfinite predictions on output scale")
     csv_temporary = folder / "imputed.csv.tmp"
     pd.DataFrame(
