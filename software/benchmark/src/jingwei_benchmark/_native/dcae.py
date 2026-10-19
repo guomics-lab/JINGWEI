@@ -2,7 +2,7 @@ import torch
 import pytorch_lightning as pl
 import torch.nn.functional as F
 
-from .models import DCAE
+from ..ae_models import build_dcae
 
 
 class DCAEImputer(pl.LightningModule):
@@ -20,6 +20,8 @@ class DCAEImputer(pl.LightningModule):
         batch_size=64,
         supervision_mask_tensor=None,
         num_workers=0,
+        ae_architecture="native",
+        ae_dropout=.1,
     ):
         super().__init__()
         supervision = (
@@ -61,7 +63,8 @@ class DCAEImputer(pl.LightningModule):
 
         feature_dim = self.full_data_tensor.size(1)
 
-        self.model = DCAE(
+        self.ae_architecture = ae_architecture
+        self.model = build_dcae(ae_architecture, dropout=ae_dropout,
             input_feature_dim=feature_dim,
             ae_dim=ae_dim,
             mask_predictor_hidden_dim=mask_predictor_hidden_dim,
@@ -75,8 +78,8 @@ class DCAEImputer(pl.LightningModule):
         self.lambda_mask = lambda_mask
         self.num_workers = num_workers
 
-    def forward(self, x):
-        return self.model(x)
+    def forward(self, x, observed_mask=None):
+        return self.model(x, observed_mask) if getattr(self.model, "mask_aware", False) else self.model(x)
 
     def train_dataloader(self):
         train_dataset = torch.utils.data.TensorDataset(
@@ -96,7 +99,7 @@ class DCAEImputer(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         input_batch, target_batch, mask_batch, supervision_batch = batch
         observed = supervision_batch > 0.5
-        x_recon, mask_logits = self.model(input_batch)
+        x_recon, mask_logits = self(input_batch, mask_batch)
 
         if observed.any():
             recon_loss = F.mse_loss(x_recon[observed], target_batch[observed])
@@ -129,7 +132,7 @@ class DCAEImputer(pl.LightningModule):
         self.eval()
         with torch.no_grad():
             input_data = self.full_data_tensor * self.supervision_mask_tensor
-            x_tilde, _ = self.model(input_data)
+            x_tilde, _ = self(input_data, self.supervision_mask_tensor)
             imputed_data = self.full_data_tensor.clone()
 
             unobserved_mask = self.supervision_mask_tensor == 0

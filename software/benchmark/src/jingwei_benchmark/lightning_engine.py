@@ -56,7 +56,10 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
             num_decoder_blocks=params.get("decoder_blocks", 2),
             dilation=params.get("dilation", 2),
             learning_rate=params.get("learning_rate", 0.001),
+            ae_architecture=params.get("ae_architecture", "native"),
+            ae_dropout=params.get("ae_dropout", .1),
         )
+        print(f"AE architecture={params.get('ae_architecture', 'native')} | parameters={sum(p.numel() for p in model.parameters())}", flush=True)
     class TrainingDeviceRecorder(pl.Callback):
         def on_train_start(self, trainer, module):
             self.device = next(module.parameters()).device
@@ -98,4 +101,10 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
     metadata.update(actual_device=str(actual_device), torch_version=torch.__version__, training_engine="lightning",
                     precision="float32", epochs_trained=trainer.current_epoch, training_steps=trainer.global_step,
                     initialization_s=initialized-started, training_s=trained-initialized, prediction_s=finished-trained)
+    metadata["model_parameters"] = sum(parameter.numel() for parameter in model.parameters())
+    if name == "jingwei-dcae":
+        metadata.update(ae_architecture=params.get("ae_architecture", "native"),
+                        model_architecture_version=getattr(model.model, "architecture_version", "native-dcae-v1"),
+                        ae_dropout=params.get("ae_dropout", .1) if params.get("ae_architecture") == "global" else 0.,
+                        mask_head_input="latent" if params.get("ae_architecture") == "global" else "reconstruction")
     return prediction, metadata

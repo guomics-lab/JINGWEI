@@ -89,12 +89,15 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed):
                     mask_predictor_hidden_dim=(params.get("hidden_dims", [256, 128]) or [128])[0])
         factorized = factorize_dmf(model)
     else:
-        model = DCAE(input_feature_dim=matrix.shape[1], ae_dim=params.get("latent_dim", 64),
+        from .ae_models import build_dcae
+        model = build_dcae(params.get("ae_architecture", "native"), dropout=params.get("ae_dropout", .1),
+                     input_feature_dim=matrix.shape[1], ae_dim=params.get("latent_dim", 64),
                      mask_predictor_hidden_dim=params.get("mask_predictor_hidden_dim", params.get("hidden_dims", [256])[0]),
                      num_encoder_blocks=params.get("encoder_blocks", 2),
                      num_decoder_blocks=params.get("decoder_blocks", 2),
                      dilation=params.get("dilation", 2))
         factorized = False
+        print(f"AE architecture={params.get('ae_architecture', 'native')} | parameters={sum(p.numel() for p in model.parameters())}", flush=True)
     model.to(device)
     target = torch.from_numpy(normalized).to(device)
     input_mask = torch.as_tensor(available & ~training_hidden, dtype=torch.float32, device=device)
@@ -122,7 +125,12 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed):
         for indices in loader:
             indices = indices.to(device)
             batch_input = inputs.index_select(0, indices)
-            reconstruction, logits = (model(batch_input, row_indices=indices) if name == "jingwei-dmf" else model(batch_input))
+            if name == "jingwei-dmf":
+                reconstruction, logits = model(batch_input, row_indices=indices)
+            elif getattr(model, "mask_aware", False):
+                reconstruction, logits = model(batch_input, input_mask.index_select(0, indices))
+            else:
+                reconstruction, logits = model(batch_input)
             loss = masked_loss(reconstruction, logits, target.index_select(0, indices),
                                input_mask.index_select(0, indices), supervision.index_select(0, indices), weight)
             optimizer.zero_grad(set_to_none=True)
@@ -142,6 +150,8 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed):
             end = min(begin + params.get("batch_size", 64), len(matrix))
             if name == "jingwei-dmf":
                 output = model._reconstruct_rows(torch.arange(begin, end, device=device))
+            elif getattr(model, "mask_aware", False):
+                output = model.reconstruct(target[begin:end] * supervision[begin:end], supervision[begin:end])
             else:
                 # Native DCAE inference does not need its auxiliary mask head.
                 output = model.ae((target[begin:end] * supervision[begin:end]).unsqueeze(1)).squeeze(1)
@@ -164,4 +174,10 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed):
         "training_input_entries": int((available & ~training_hidden).sum()),
         "initialization_s": initialized - started, "training_s": trained - initialized,
         "prediction_s": finished - trained,
+        "model_parameters": sum(parameter.numel() for parameter in model.parameters()),
+        **({"ae_architecture": params.get("ae_architecture", "native"),
+            "model_architecture_version": getattr(model, "architecture_version", "native-dcae-v1"),
+            "ae_dropout": params.get("ae_dropout", .1) if getattr(model, "mask_aware", False) else 0.,
+            "mask_head_input": "latent" if getattr(model, "mask_aware", False) else "reconstruction"}
+           if name == "jingwei-dcae" else {}),
     }

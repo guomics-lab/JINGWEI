@@ -135,11 +135,17 @@ class ParameterDialog(QDialog):
         self.fields = {}
         form = QFormLayout()
         for key, spec in PARAMETERS.get(name, {}).items():
-            widget = control(spec)
+            widget = (combo([(self.t("原始卷积 AE"), "native"), (self.t("全局掩码 AE（实验）"), "global")])
+                      if key == "ae_architecture" else control(spec))
             if key in overrides:
                 set_value(widget, overrides[key])
             self.fields[key] = widget
             form.addRow(self.t(spec[0]), widget)
+        if "ae_dropout" in self.fields:
+            def update_architecture():
+                self.fields["ae_dropout"].setEnabled(value(self.fields["ae_architecture"]) == "global")
+            self.fields["ae_architecture"].currentIndexChanged.connect(update_architecture)
+            update_architecture()
         if not self.fields:
             layout.addWidget(text(self.t("此方法没有可调整的参数。")))
         layout.addLayout(form)
@@ -154,6 +160,8 @@ class ParameterDialog(QDialog):
     def _reset(self, name):
         for key, widget in self.fields.items():
             set_value(widget, PARAMETERS[name][key][1])
+        if "ae_dropout" in self.fields:
+            self.fields["ae_dropout"].setEnabled(value(self.fields["ae_architecture"]) == "global")
 
     def values(self):
         return {key: dimensions(widget) if key == "hidden_dims" else value(widget)
@@ -201,6 +209,8 @@ class RunTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             if key == "status":
                 return self.t(STATE_LABELS.get(cell, cell or "—"))
+            if key == "method" and row.get("ae_architecture") == "global":
+                return str(cell) + " · " + self.t("全局 AE")
             return "—" if cell is None else f"{cell:.5g}" if isinstance(cell, float) else str(cell)
         if role == Qt.ToolTipRole:
             return row.get("error") or row.get("W2_note") or ""

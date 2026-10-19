@@ -111,3 +111,30 @@ and the user's existing application/window are unchanged by these checks.
 
 Raw JUnit files, configurations, complete method results, old-function controls,
 logs and screenshots remain in the ignored local `results/se-qa/` directory.
+
+## Development global AE checks
+
+On 2026-10-19 the optional `global` DCAE architecture was added to the development
+source. Windows integration regression: **203 passed, 2 skipped**. WSL/Linux:
+**196 passed, 9 skipped**. The latest focused global-AE checks: **19 passed**,
+including CPU/CUDA inference agreement and the GUI architecture/reset/result
+label changes made after the full suites started.
+
+Coverage includes native initial-weight/output equivalence, true-zero versus
+missing-zero semantics, masked-value/gradient isolation, short/odd/wide shapes,
+capacity validation, CPU runs through PyTorch and Lightning, observed-value
+preservation, actual CLI worker dispatch, rejection of new models in historical
+replay, and Windows GUI selection/reset. GUI checks remain offscreen.
+
+The [architecture report](AE_ARCHITECTURE.md) records the paired Alzheimer
+experiment, inner-validation selection, training-only normalization, three
+initialization/validation seeds, protein-mean baseline and limitations. Its
+mean MSE is 0.691538 for native versus 0.540648 for global on the common outer
+mask; new results are independent of historical-table reproduction. This source
+feature is not part of the already released V1.0.3 binaries.
+
+Separate final checks ran both training engines on actual CUDA, with six optimizer
+updates each, and independently loaded all three saved global models on CPU.
+Their predictions match the stored GPU predictions with maximum absolute
+differences below 0.000003. Chinese and English parameter dialogs were rendered
+offscreen with an explicitly loaded Windows font and visually inspected.

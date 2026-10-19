@@ -33,6 +33,8 @@ PARAMETERS["mice-pmm"].update({"donors": ("PMM 候选供体数", 5, 1, 10000),
 for name in ("jingwei-dmf", "jingwei-dcae", "pimms-dae", "pimms-vae", "pimms-cf"):
     PARAMETERS[name] = dict(NEURAL)
 PARAMETERS["jingwei-dcae"].update({
+    "ae_architecture": ("AE 架构", "native", None, None),
+    "ae_dropout": ("全局 AE Dropout", .1, 0., .99),
     "mask_predictor_hidden_dim": ("掩蔽预测器维度", 256, 1, 100000),
     "encoder_blocks": ("编码块数量", 2, 1, 32),
     "decoder_blocks": ("解码块数量", 2, 1, 32),

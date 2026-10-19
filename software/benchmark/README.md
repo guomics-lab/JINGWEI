@@ -119,6 +119,12 @@ the current working directory. Explicit `--input` always takes precedence.
 
 ## Execution speed
 
+The development source also provides an optional [global mask-aware AE](AE_ARCHITECTURE.md)
+for DCAE: `--ae-architecture global`, or **DCAE Parameters → AE architecture** in
+the fair-protocol GUI. It adds a global bottleneck and feature-specific decoder.
+The native architecture remains the default and historical replay keeps its
+original model. This option is not included in the V1.0.3 release binaries.
+
 `mice` / `mice-pmm` now defaults to the application's **Python linear MICE-PMM**
 implementation. It uses posterior draws from ridge-regularized linear
 conditionals and type-1 predictive mean matching, with **5 imputations × 5 full

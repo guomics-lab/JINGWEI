@@ -120,6 +120,8 @@ def parser():
         p.add_argument("--hidden-dims", nargs="+", type=int, default=[256, 128])
         p.add_argument("--learning-rate", type=float, default=0.001)
         p.add_argument("--mask-weight", type=float, default=0.5)
+        p.add_argument("--ae-architecture", choices=("native", "global"), default="native",
+                       help="DCAE architecture: original convolutional AE, or experimental mask-aware global AE")
         p.add_argument(
             "--w2-features",
             nargs="+",

@@ -1,6 +1,9 @@
 """Small, explicit desktop message catalog; method IDs and saved data stay stable."""
 
 MESSAGES = {
+    "全局 AE": "Global AE",
+    "AE 架构": "AE architecture", "全局 AE Dropout": "Global AE dropout",
+    "原始卷积 AE": "Original convolutional AE", "全局掩码 AE（实验）": "Global mask-aware AE (experimental)",
     "评测方案": "Protocol", "原 notebook 回放": "Original notebook replay",
     "公平评测（两次掩蔽）": "Fair benchmark (two masks)",
     "原 notebook：单次掩蔽 · 种子 {seed}": "Original notebook: single mask · Seed {seed}",

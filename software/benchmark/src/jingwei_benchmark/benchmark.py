@@ -181,6 +181,12 @@ def run_experiment(args):
         raise ValueError("--method-config must contain an object of parameter objects keyed by method")
     overrides = {canonical_name(k): v for k, v in overrides.items()}
     notebook = args.command == "benchmark" and getattr(args, "evaluation_protocol", "fair") == "original-notebook"
+    if "jingwei-dcae" in methods:
+        architecture = overrides.get("jingwei-dcae", {}).get("ae_architecture", getattr(args, "ae_architecture", "native"))
+        if architecture not in ("native", "global"):
+            raise ValueError("AE architecture must be native or global")
+        if notebook and architecture != "native":
+            raise ValueError("original-notebook requires the original AE; select the fair protocol to use the global AE")
     if notebook:
         from .notebook_protocol import load_notebook_matrix, NOTEBOOK_ORDER
         methods.sort(key=lambda method: NOTEBOOK_ORDER.index(method) if method in NOTEBOOK_ORDER else len(NOTEBOOK_ORDER))
@@ -361,6 +367,7 @@ def run_experiment(args):
                     "hidden_dims": args.hidden_dims,
                     "learning_rate": args.learning_rate,
                     "mask_weight": args.mask_weight,
+                    "ae_architecture": getattr(args, "ae_architecture", "native"),
                     "evaluation_protocol": "original-notebook" if notebook else "fair",
                     **preset_parameters("original-benchmark" if notebook else getattr(args, "jingwei_preset", "standard"), method),
                     **overrides.get(method, {}),
