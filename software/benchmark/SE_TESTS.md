@@ -102,3 +102,43 @@ verifies execution, not convergence or full-AD accuracy.
 Evidence: `results/se-followup-20261020/REPORT.md`, `summary.json`, pytest XML/logs
 and `frozen/validation.json`. These fixes are source-only: the installed application
 and installer have not been rebuilt or replaced. macOS runtime was not tested.
+
+## GUI review comments — 2026-10-20
+
+Configuration controls now lock from submission through execution/cancellation and
+unlock after completion, cancellation or submission failure. Stop, results and logs
+remain usable; advanced settings can be inspected with their controls disabled.
+Reuse settings restores common settings, selected methods, GUI method parameters
+recorded in worker jobs, W2 features and the output folder. A cloned task was rerun
+after deleting its original CLI override file, confirming its custom KNN setting.
+The Open task button is removed in both languages. Blank task names use
+`task-YYYYMMDD-HHMMSS`; output folders include a unique suffix and retain that name
+when reopened. Explicit names and input-file provenance remain intact.
+
+The final combined GUI/job regression passed 19 cases. Together with the other
+reviewed GUI regressions, 43 distinct Windows cases passed after fixes. WSL passed
+all ten job lifecycle/naming cases. Isolated hidden native Windows cold/warm runs
+completed mean, KNN and DCAE; parameter locks, automatic unlock, icons, languages,
+live logs and cache reuse passed. Evidence and UI captures are under
+`results/gui-comments-20261020/`. This work changes source GUI behavior; the
+existing installer has not been rebuilt.
+
+## Imputation training and application naming — 2026-10-20
+
+The application and current CLI use the name `jingwei`. In Impute, the GUI's
+missingness/rate settings construct a training mask for DMF/DCAE only. Artificially
+hidden observations remain supervised targets; inference uses the original input
+and preserves known observations in exports. Other methods receive the unchanged
+input and no JINGWEI training mask. Benchmark still constructs one shared test mask
+with no additional platform training mask; its Alzheimer reference is unchanged.
+
+After fixes, 49 distinct Windows targeted cases passed across the final runs;
+WSL passed all 43 related CLI, training, packaging and runtime cases. MCAR,
+logistic MNAR and original-repository MNAR dispatch were checked. Real Torch and
+Lightning DMF/DCAE training completed with verified mask/input/target counts and
+finite imputation outputs. A GUI imputation task completed mean, DMF and DCAE;
+training settings remained editable before submission, locked during execution,
+and survived copying the completed configuration. Both GUI languages passed.
+
+Evidence: `results/gui-release-1.0.5-20261020/`, including merged final pytest
+results, GUI workflow exports, build logs and packaged runtime checks.

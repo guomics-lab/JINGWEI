@@ -22,7 +22,7 @@ ROOT = BUILD.parents[2]
 def release_member(member):
     member.uid = member.gid = 0
     member.uname = member.gname = ""
-    member.mode = 0o755 if member.isdir() or Path(member.name).name == "jingwei-benchmark" else 0o644
+    member.mode = 0o755 if member.isdir() or Path(member.name).name == "jingwei" else 0o644
     return member
 
 
@@ -67,7 +67,7 @@ def main():
     for pattern in excluded:
         env = env.exclude(pattern)
     purelib = Path(sysconfig.get_path("purelib")).relative_to(prefix)
-    extra = [File(str(ROOT / "data/Alzheimer.csv"), "share/jingwei-benchmark/data/Alzheimer.csv", is_conda=False)]
+    extra = [File(str(ROOT / "data/Alzheimer.csv"), "share/jingwei/data/Alzheimer.csv", is_conda=False)]
     with tempfile.TemporaryDirectory(prefix="jingwei-release-metadata-") as temporary:
         staging = Path(temporary)
         # Convert the private editable application into real files; its native
@@ -94,10 +94,10 @@ def main():
         required = {"NAguideR": "inst/NAguideRapp/Trunc_KNN/Imput_funcs.r", "DreamAI": "Code/R/RegImpute.R"}
         for name, relative in required.items():
             file = Path(sources[name]) / relative
-            extra.append(File(str(file), f"share/jingwei-benchmark/.method-sources/{name}/{relative}", is_conda=False))
+            extra.append(File(str(file), f"share/jingwei/.method-sources/{name}/{relative}", is_conda=False))
             for file in Path(sources[name]).glob("*"):
                 if file.is_file() and file.name.upper().startswith(("LICENSE", "COPYING")):
-                    extra.append(File(str(file), f"share/jingwei-benchmark/licenses/{name}/{file.name}", is_conda=False))
+                    extra.append(File(str(file), f"share/jingwei/licenses/{name}/{file.name}", is_conda=False))
         files = [*env.files, *extra]
         if any("/PySide6/" in f.target or "/shiboken6/" in f.target for f in files):
             raise RuntimeError("Qt unexpectedly entered the POSIX CLI runtime")
@@ -109,7 +109,7 @@ def main():
     for key, value in {"SYSTEM": system, "MACHINE": machine, "SHA256": sha,
                        "RUNTIME_ID": target + "-" + sha[:20]}.items():
         launcher = launcher.replace("@" + key + "@", value)
-    executable = output / "jingwei-benchmark"
+    executable = output / "jingwei"
     executable.write_text(launcher, encoding="utf-8", newline="\n")
     executable.chmod(0o755)
     shutil.copyfile(BUILD / "fix_r_runtime.py", output / "fix_r_runtime.py")
@@ -119,21 +119,23 @@ def main():
     versions = {name: metadata.version(name) for name in ("torch", "fastai", "pimms-learn", "scikit-learn", "numpy", "scipy", "pandas", "anndata")}
     r_version = subprocess.run([str(rscript), "--version"], capture_output=True, text=True, check=True)
     from jingwei_benchmark import __version__
-    info = {"app_version": __version__, "platform": target, "python": sys.version, "versions": versions,
+    info = {"app_version": __version__, "app_name": "jingwei", "console_executable": "jingwei",
+            "platform": target, "python": sys.version, "versions": versions,
             "runtime_sha256": sha, "bundled_r": True, "r_version": r_version.stdout.strip(),
             "gui_included": False, "build_libc": platform.libc_ver(), "method_count": len(states),
             "default_baseline_engine": "optimized",
             "default_benchmark_methods": "all",
             "default_benchmark_repeats": 1,
+            "imputation_training_mask": "jingwei-only; selected mechanism and rate; original targets retained",
             "notebook_source_revision": "98686b54fdb9918a4d4cc9d99ac4880a6dadcefe",
             "default_timeout_s": DEFAULT_TIMEOUT_SECONDS,
             "default_mice_backend": "python-linear-mice-pmm",
             "macos_runtime_validated": False}
     (output / "build-info.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
     # The runtime is already compressed; avoid recompressing several GB twice.
-    release = output.parent / f"jingwei-benchmark-{target}.tar"
+    release = output.parent / f"jingwei-{target}.tar"
     with tarfile.open(release, "w") as bundle:
-        bundle.add(output, arcname=f"jingwei-benchmark-{target}", filter=release_member)
+        bundle.add(output, arcname=f"jingwei-{target}", filter=release_member)
     print(f"Standalone CLI: {executable}\nRelease archive: {release}", flush=True)
 
 

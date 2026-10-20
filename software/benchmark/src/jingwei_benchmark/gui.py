@@ -423,8 +423,15 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self.update_run_state()
 
     def update_run_state(self):
-        active = bool(self.store.active())
-        self.start_button.setEnabled(self.preview_data is not None and bool(self.backend_states) and not self._environment_checking and not self._inspecting and not active and not self._submitting)
+        busy = self.configuration_locked()
+        self.configuration_panel.setEnabled(not busy)
+        for index in range(self.advanced_tabs.count()):
+            self.advanced_tabs.widget(index).setEnabled(not busy)
+        self.clone_button.setEnabled(bool(self.selected_job) and not busy)
+        self.start_button.setEnabled(self.preview_data is not None and bool(self.backend_states) and not self._environment_checking and not self._inspecting and not busy)
+
+    def configuration_locked(self):
+        return self._submitting or bool(self.store.active())
 
     def device_changed(self):
         if "gpu_id" in self.fields:
@@ -580,6 +587,8 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             box.setChecked(name in names and box.isEnabled())
 
     def edit_parameters(self, name):
+        if self.configuration_locked():
+            return
         try:
             common = {key: dimensions(self.fields[key]) if key == "hidden_dims" else value(self.fields[key])
                       for key in PARAMETERS.get(name, {}) if key in NEURAL}
@@ -594,6 +603,8 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             self.remember_session()
 
     def choose_features(self):
+        if self.configuration_locked():
+            return
         if not self.preview_data:
             self.show_error(self.t("请先检查数据"))
             return
@@ -649,6 +660,8 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         return config
 
     def start_job(self):
+        if self.configuration_locked():
+            return
         try:
             if not self.preview_data or self.signature() != self.preview_signature:
                 raise ValueError(self.t("数据或读取设置已改变，请重新检查数据"))
@@ -661,7 +674,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         if self._submitting:
             return
         self._submitting = True
-        self.start_button.setEnabled(False)
+        self.update_run_state()
         output_root = self.output_root.text().strip()
         parameters = {} if config["evaluation_protocol"] == "original-notebook" else {
             name: settings for name, settings in self.method_parameters.items() if name in config["methods"]}
@@ -683,7 +696,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
     def refresh_jobs(self):
         self.update_run_state()
         for button in self.job_actions:
-            button.setEnabled(bool(self.selected_job))
+            button.setEnabled(bool(self.selected_job) and (button is not self.clone_button or not self.configuration_locked()))
         if not self.selected_job:
             self.cancel_button.setEnabled(False)
             return
@@ -692,7 +705,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         except (ValueError, OSError, KeyError, TypeError):
             self.selected_job = None
             self._last_result_digest = None
-            self.current_task_label.setText(self.t("尚未打开任务"))
+            self.current_task_label.setText(self.t("尚无任务"))
             self.progress_label.setText(self.t("任务目录无法读取，请重新打开任务。"))
             self.log_view.setPlainText(self.t("任务目录无法读取，请重新打开任务。"))
             self.run_model.replace([], self.run_model.columns)
@@ -828,19 +841,38 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             self.show_error(str(exc))
 
     def clone_job(self):
-        if not self.selected_job:
+        if not self.selected_job or self.configuration_locked():
             return
+        from copy import deepcopy
+        from .gui_jobs import read_json
+        from .methods import canonical_name
         info = self.store.info(self.selected_job)
+        parameters = deepcopy(info.get("parameters", {}))
+        methods = [canonical_name(name) for name in info["config"]["methods"]]
+        results = Path(info.get("results_folder", Path(info["folder"]) / "results"))
+        # CLI manifests do not carry GUI overrides. The submitted worker jobs
+        # record the effective common + preset + per-method parameter values.
+        for name in methods:
+            payload = read_json(results / f"repeat_000/{name}/job.json")
+            if isinstance(payload, dict) and isinstance(payload.get("parameters"), dict):
+                editable = {key: deepcopy(setting) for key, setting in payload["parameters"].items()
+                            if key in PARAMETERS.get(name, {})}
+                parameters[name] = {**parameters.get(name, {}), **editable}
         if "mice_backend" not in info["config"] and any(
                 name in ("mice", "mice-pmm") for name in info["config"]["methods"]):
             set_value(self.fields["mice_backend"], "r")
         for key, data in info["config"].items():
             if key in self.fields:
                 set_value(self.fields[key], -1 if key == "gpu_id" and data is None else data)
-        self.method_parameters = dict(info.get("parameters", {}))
-        self.select_methods(info["config"]["methods"])
+        self.method_parameters = parameters
+        # Keep the recorded selection even if a newly selected runtime has not
+        # finished probing availability yet.
+        for name, box in self.method_checks.items():
+            box.setChecked(name in methods)
         self.mode_changed()
+        self.device_changed()
         set_value(self.fields["output_scale"], info["config"].get("output_scale", "working"))
+        self.output_root.setText(str(Path(info["folder"]).parent))
         self.job_name.setText(info["name"] + " · " + self.t("副本"))
         self.input_path.setFocus()
         source = next(Path(info["folder"]).glob("input.*"), None)
@@ -849,7 +881,9 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             source = candidate if candidate.is_file() else None
         if source:
             self.set_input(source, info["config"].get("layer"))
-            self.feature_selection = info["config"].get("w2_features")
+            features = deepcopy(info["config"].get("w2_features"))
+            if features:
+                self._pending_features = self.signature(), features
         else:
             self.input_path.clear()
             self.invalidate_preview()
@@ -888,7 +922,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
 
 def launch(workspace=None):
     if sys.platform != "win32":
-        raise ValueError("The benchmark GUI is Windows-only; use jingwei-benchmark CLI")
+        raise ValueError("The benchmark GUI is Windows-only; use jingwei CLI")
     from .runtime import prepare_standard_streams
     prepare_standard_streams()
     from .windows_identity import set_process_app_id, apply_application_icon

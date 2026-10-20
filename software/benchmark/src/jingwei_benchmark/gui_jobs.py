@@ -100,6 +100,8 @@ def make_argv(config, input_path, output_path, cancel_file=None, parameter_file=
     notebook = mode == "benchmark" and args.evaluation_protocol == "original-notebook"
     if not notebook and mode == "benchmark" and uses_mask_rate(args.mechanism, args.paper_probabilities) and not 0 < args.mask_rate < 1:
         raise ValueError("评测掩蔽率应在 0 和 1 之间")
+    if mode == "impute" and uses_mask_rate(args.mechanism, args.paper_probabilities) and not 0 <= args.mask_rate < 1:
+        raise ValueError("训练掩蔽率应在 0（含）和 1 之间")
     custom = set() if notebook else {args.mechanism} - {"mcar", ORIGINAL_MECHANISM}
     if custom and not 0 <= args.low_quantile < args.high_quantile <= 1:
         raise ValueError("分位数应满足 0 ≤ 低分位 < 高分位 ≤ 1")
@@ -257,14 +259,18 @@ class JobStore:
         with self._lock:
             if self.active():
                 raise ValueError("已有任务在运行，请先等待完成或停止当前任务")
+            stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+            supplied_name = name.strip()
+            task_name = supplied_name or f"task-{stamp}"
             job_id = uuid.uuid4().hex
             if output_root is None:
                 folder = self.jobs / job_id
             else:
                 base = Path(output_root).expanduser().resolve()
                 base.mkdir(parents=True, exist_ok=True)
-                label = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name.strip() or source.stem).strip(' .')[:80] or 'benchmark'
-                folder = base / f"{label}-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{job_id[:8]}"
+                label = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', task_name).strip(' .')[:80] or 'benchmark'
+                suffix = f"-{stamp}" if supplied_name else ""
+                folder = base / f"{label}{suffix}-{job_id[:8]}"
             folder.mkdir()
             self._folders[job_id] = folder
             target = folder / ("input" + source.suffix.lower())
@@ -274,7 +280,7 @@ class JobStore:
                 argv = make_argv(config, target, folder / "results", folder / "cancel.request", parameter_file)
                 shutil.copy2(source, target)
                 write_json(parameter_file, parameters or {})
-                request = {"schema_version": 1, "id": job_id, "name": name.strip() or source.stem,
+                request = {"schema_version": 1, "id": job_id, "name": task_name,
                            "source_name": source.name, "created_at": datetime.now(timezone.utc).isoformat(),
                            "config": config, "parameters": parameters or {}, "argv": argv}
                 # Publish history only after PID/creation-time identity exists.

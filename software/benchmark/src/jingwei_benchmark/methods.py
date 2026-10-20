@@ -94,7 +94,7 @@ ALIASES = {
 def canonical_name(name):
     name = ALIASES.get(name.lower(), name.lower())
     if name not in METHODS:
-        raise ValueError(f"unknown method {name}; use 'jingwei-benchmark methods'")
+        raise ValueError(f"unknown method {name}; use 'jingwei methods'")
     return name
 
 

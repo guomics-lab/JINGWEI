@@ -94,7 +94,10 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
         "training_device": str(recorder.device),
         "training_protocol": ("fixed model-supplied mask; supervision on remaining observations" if training_hidden.any()
                               else "method-owned training on common evaluation-corrupted input; no platform training mask"),
-        "normalization": "per-feature mean/std fitted after evaluation masking",
+        "normalization": "per-feature mean/std fitted on method input observations",
+        "supervision_entries_per_epoch": int(available.sum()),
+        "training_input_entries": int((available & ~training_hidden).sum()),
+        "training_hidden_entries": int(training_hidden.sum()),
     }
     actual_device = next(model.parameters()).device
     if actual_device.type != device:

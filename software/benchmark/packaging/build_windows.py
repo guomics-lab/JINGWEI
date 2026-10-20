@@ -66,6 +66,7 @@ def main():
             "default_benchmark_methods": "all",
             "default_benchmark_repeats": 1, "default_gui_protocol": "fair",
             "mask_protocol_version": 3, "platform_mask_count": 1, "training_protocol": "method-owned",
+            "imputation_training_mask": "jingwei-only; selected mechanism and rate; original targets retained",
             "default_dcae_architecture": "global-ae-v1",
             "notebook_source_revision": "98686b54fdb9918a4d4cc9d99ac4880a6dadcefe",
             "default_timeout_s": DEFAULT_TIMEOUT_SECONDS,

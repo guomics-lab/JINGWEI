@@ -4,7 +4,7 @@ These files build the standalone **benchmark application**. They are not a
 dependency-installation workflow for end users. The published JINGWEI Python
 package and its release process are outside this application's scope.
 
-Release builders copy `software/benchmark/LICENSE`, matching the application's
+Release builders copy `software/benchmark/LICENSE.txt`, matching the application's
 declared PolyForm Noncommercial 1.0.0 license. Its text is reproduced unchanged
 from the [official 1.0.0 source](https://github.com/polyformproject/polyform-licenses/blob/1.0.0/PolyForm-Noncommercial-1.0.0.md).
 
@@ -40,11 +40,11 @@ Python build constraints aligned instead of overwriting conda-managed files.
 ```powershell
 python software/benchmark/packaging/build_windows.py
 python software/benchmark/packaging/validate_windows.py `
-  --executable "software/benchmark/dist/windows-x86_64/JINGWEI Benchmark/JINGWEI Benchmark.exe" `
-  --output results/benchmark-windows-validation --all-methods --cuda
+  --executable "software/benchmark/dist/windows-x86_64/jingwei/jingwei.exe" `
+  --output results/benchmark-windows-validation --all-methods --cuda --background
 ```
 
-Output contains `JINGWEI Benchmark.exe`, `jingwei-benchmark.exe`, and their shared
+Output contains `jingwei.exe`, `jingwei-cli.exe`, and their shared
 `_internal` runtime. Both use the same application source and worker whitelist.
 All Python/R backends are bundled. PyInstaller's Windows onedir build avoids
 repeated multi-GB extraction by method workers. The original logo is retained.
@@ -70,8 +70,8 @@ V1.0.1 adds the primary, single-download Windows installer:
 
 ```powershell
 python software/benchmark/packaging/build_bootstrap.py --iscc "C:\path\to\ISCC.exe" `
-  --payload "software/benchmark/dist/releases/v1.0.2" `
-  --icon "software/benchmark/dist/windows-x86_64/JINGWEI Benchmark/jingwei.ico"
+  --payload "software/benchmark/dist/releases/v1.0.5" `
+  --icon "software/benchmark/dist/windows-x86_64/jingwei/jingwei.ico"
 ```
 
 Build the offline payload first. The bootstrap includes immutable GitHub asset
@@ -81,6 +81,12 @@ and its uninstaller. Verified payload files are cached for retries and removed
 after a successful installation. `windows-installer-manifest.json` records the
 exact payload. A loopback-only `--test-server` mode is for negative fixtures;
 its manifest is marked `test_only` and must never be published.
+
+For an isolated installer check, pass `/JINGWEI-VALIDATION=1` and an explicit
+temporary `/DIR` to the bootstrap or offline installer. The bootstrap forwards
+the validation flag; the payload skips user uninstall registration, shortcuts
+and closing running applications. Use `/VERYSILENT /SUPPRESSMSGBOXES` for
+unattended checks. Never use this mode for a user's normal installation.
 
 The desktop stores `session.json` and `environment.json` beside `ui.json` in the
 user workspace. Language remains in its existing file. Cache identity includes
@@ -102,7 +108,7 @@ bootstrap download before promoting the release to latest.
 ```bash
 python software/benchmark/packaging/build_posix.py
 python software/benchmark/packaging/validate_posix.py \
-  --executable software/benchmark/dist/linux-x86_64/jingwei-benchmark \
+  --executable software/benchmark/dist/linux-x86_64/jingwei \
   --output results/benchmark-linux-validation --all-methods --cuda
 ```
 

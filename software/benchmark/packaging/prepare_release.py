@@ -18,12 +18,12 @@ def digest(path):
 def main():
     from jingwei_benchmark import __version__
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--archive", type=Path, default=APPLICATION / "dist/jingwei-benchmark-linux-x86_64.tar")
+    parser.add_argument("--archive", type=Path, default=APPLICATION / "dist/jingwei-linux-x86_64.tar")
     parser.add_argument("--output", type=Path, default=APPLICATION / f"dist/releases/v{__version__}")
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    prefix = f"jingwei-benchmark-{__version__}-linux-x86_64"
+    prefix = f"jingwei-{__version__}-linux-x86_64"
     parts = []
     whole = hashlib.sha256()
     snapshot = args.archive.stat()

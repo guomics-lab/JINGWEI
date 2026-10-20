@@ -93,6 +93,8 @@ begin
     Arguments := '/SP- /NORESTART /LANG=' + ActiveLanguage;
     if WizardSilent then
       Arguments := Arguments + ' /VERYSILENT /SUPPRESSMSGBOXES';
+    if ExpandConstant('{param:JINGWEI-VALIDATION|0}') = '1' then
+      Arguments := Arguments + ' /JINGWEI-VALIDATION=1 /NOICONS /NOCLOSEAPPLICATIONS';
     Destination := ExpandConstant('{param:DIR|}');
     if Destination <> '' then
       Arguments := Arguments + ' /DIR="' + Destination + '"';

@@ -33,7 +33,7 @@ def main(*, desktop=None):
         from jingwei_benchmark.cli import main as cli_main
         return cli_main(sys.argv[1:])
     if sys.platform != "win32":
-        raise RuntimeError("The benchmark GUI is available on Windows only; use jingwei-benchmark CLI")
+        raise RuntimeError("The benchmark GUI is available on Windows only; use jingwei CLI")
     from jingwei_benchmark.gui import launch
     import argparse
     parser = argparse.ArgumentParser()

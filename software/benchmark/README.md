@@ -16,10 +16,10 @@ runs on CPU. GPU execution requires the machine's NVIDIA driver.
 
 ## Windows
 
-Download and run the [Windows installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe).
+Download and run the [Windows installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.5/jingwei-Windows-Setup.exe).
 It automatically downloads and verifies the complete application. Install once,
-then open **Start → JINGWEI Benchmark** (the published 1.0.3 installer). No manual BIN downloads are required.
-See the [installation guide](RELEASE-1.0.3.md).
+then open **Start → jingwei**. No manual BIN downloads are required.
+See the [installation guide](RELEASE-1.0.5.md).
 The GUI uses the original JINGWEI bird for the
 application, window and Windows taskbar.
 
@@ -36,8 +36,11 @@ shared training settings.
 
 Each run creates its own folder beneath the selected **Output folder**. The
 **Log** tab opens at run start and shows live progress and method output.
-**Open task…** opens a saved or moved GUI task, or a CLI output folder. Startup
-leaves results empty. Configuration, output folder and window layout are saved
+Configuration is locked during submission, execution and cancellation; stop,
+logs and results remain available. **Reuse settings** restores the current task's
+common settings and effective method parameters. The **Open task** button has
+been removed. Blank task names use `task-YYYYMMDD-HHMMSS` (local time); generated
+folder names add a unique suffix. Startup leaves results empty. Configuration, output folder and window layout are saved
 independently of results. Cancellation, plots and ZIP export remain available.
 
 Environment checks complete before the main window opens, with a small startup
@@ -50,15 +53,22 @@ checks again. The installer presents a plain-text `LICENSE.txt`.
 A benchmark constructs **one shared test mask**. Every method receives the same
 corrupted dataset, with test truth removed. The platform adds no training mask,
 training/validation split or denoising step. Each method owns its native training,
-validation, corruption and stopping rules. Imputation uses the supplied dataset
-directly, without an artificial platform mask.
+validation, corruption and stopping rules.
+
+In **Impute**, **Training missingness** and **Training mask rate** construct the
+JINGWEI DMF/DCAE training input. Artificially hidden observations remain available
+as supervised targets. Inference receives the original observations; exports
+preserve them and fill native missing entries. Comparison methods receive the
+original dataset with no JINGWEI training mask. Imputation creates no test mask.
 
 Original-repository MNAR preserves the exact `CSVDataset.get_mask()` formula,
 strict bands and column-major Torch random draws. Its fixed probabilities
 determine the actual rate from the data, so the GUI shows **Auto**. Other
 mechanisms expose a configurable percentage. Mask arrays, seeds and realized
-rates are saved with each run. `training_hidden` is an all-false compatibility
-array in saved bundles, not a second mask; the manifest records mask protocol 3.
+rates are saved with each run. In benchmark bundles, `training_hidden` is an
+all-false compatibility array; the manifest records mask protocol 3. Imputation
+bundles save the actual JINGWEI training mask and its method scope separately
+from the unchanged common method input.
 
 Original MNAR may leave a protein with no observations. In that case,
 these columns are removed from comparison-method inputs and excluded from the
@@ -76,17 +86,17 @@ isolated from this reference workflow. See [verification](SE_TESTS.md).
 
 ## Linux and macOS
 
-For Linux V1.0.3, download all parts, its checksums and `install-linux.sh` from
-the [release page](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.3).
+For Linux V1.0.5, download all parts, its checksums and `install-linux.sh` from
+the [release page](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.5).
 Run `sh install-linux.sh`; the command is placed in `~/.local/bin`.
-Custom installation locations are described in the [installation guide](RELEASE-1.0.3.md).
+Custom installation locations are described in the [installation guide](RELEASE-1.0.5.md).
 No macOS binary is included in this release. From the installed application folder:
 
 ```bash
-./jingwei-benchmark --help
-./jingwei-benchmark methods
-./jingwei-benchmark inspect --input data.csv
-./jingwei-benchmark benchmark --input data.csv \
+./jingwei --help
+./jingwei methods
+./jingwei inspect --input data.csv
+./jingwei benchmark --input data.csv \
   --methods jingwei-dmf jingwei-dcae mean knn bpca missforest \
   --mechanism mnar-jingwei --mask-rate 0.2 \
   --repeats 1 --device cpu --output results/my-benchmark

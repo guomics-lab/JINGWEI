@@ -17,8 +17,8 @@ DEFAULT_TIMEOUT_SECONDS = 30 * 60
 
 def parser():
     root = argparse.ArgumentParser(
-        prog="jingwei-benchmark",
-        description="JINGWEI Benchmark: compare proteomics imputation methods",
+        prog="jingwei",
+        description="jingwei: proteomics imputation and method comparison",
     )
     root.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = root.add_subparsers(dest="command", required=True)
@@ -83,7 +83,8 @@ def parser():
         add_device_arguments(p)
         p.add_argument("--mechanism", choices=MECHANISMS, default="mcar",
                        help="mnar-jingwei-original replays historical CSVDataset.get_mask on working-scale data; mnar-jingwei retains the older custom quantile rule")
-        p.add_argument("--mask-rate", type=float, default=0.2)
+        p.add_argument("--mask-rate", type=float, default=0.2,
+                       help="test mask rate for benchmark; JINGWEI training corruption rate for impute (default: 0.2)")
         p.add_argument(
             "--paper-probabilities", "--uncalibrated-mnar",
             action="store_true",
@@ -216,7 +217,7 @@ def main(argv=None):
 
         return run_experiment(args)
     except (ValueError, OSError, KeyError, ImportError, json.JSONDecodeError) as exc:
-        print(f"jingwei-benchmark: {exc}", file=sys.stderr)
+        print(f"jingwei: {exc}", file=sys.stderr)
         return 1
 
 

@@ -37,7 +37,7 @@ def main():
                 raise RuntimeError(f"Standalone CLI failed ({completed.returncode}); see {log}")
             return completed.stdout
         help_text = run("--help")
-        assert "gui" not in help_text and "benchmark" in help_text
+        assert "gui" not in help_text and "usage: jingwei " in help_text and "jingwei-benchmark" not in help_text
         benchmark_help = run("benchmark", "--help")
         assert "all 35 methods" in benchmark_help and "1800; 30 min" in " ".join(benchmark_help.split())
         default_data = json.loads(run("inspect"))
@@ -89,6 +89,25 @@ def main():
             with (output / "cuda/metrics.csv").open() as handle:
                 gpu = list(csv.DictReader(handle))
             assert len(gpu) == 5 and all(row["status"] == "completed" and row["actual_device"].startswith("cuda") for row in gpu)
+        impute_output = output / "impute-training-mask"
+        run("impute", "--input", source, "--methods", "mean", "jingwei-dmf", "jingwei-dcae",
+            "--mechanism", "mcar", "--mask-rate", ".25", "--device", "cpu", "--threads", "1",
+            "--max-epochs", "2", "--batch-size", "4", "--latent-dim", "4", "--hidden-dims", "8",
+            "--output", impute_output)
+        import numpy as np
+        imputed = json.loads((impute_output / "metrics.json").read_text(encoding="utf-8"))
+        assert len(imputed) == 3 and all(row["status"] == "completed" for row in imputed)
+        with np.load(impute_output / "repeat_000/masks.npz") as masks:
+            assert not masks["evaluation_hidden"].any() and masks["training_hidden"].any()
+            observed_count = int(masks["observed"].sum())
+            hidden_count = int(masks["training_hidden"].sum())
+        for method in ("jingwei-dmf", "jingwei-dcae"):
+            detail = json.loads((impute_output / f"repeat_000/{method}/worker_result.json").read_text(encoding="utf-8"))
+            assert detail["training_hidden_entries"] == hidden_count
+            assert detail["supervision_entries_per_epoch"] == observed_count
+            assert detail["training_input_entries"] == observed_count - hidden_count
+        with np.load(impute_output / "repeat_000/method_input.npz") as common:
+            assert not common["training_hidden"].any()
         full_input_checked = False
         if args.all_methods:
             full_output = output / "full-input-check"
@@ -110,7 +129,8 @@ def main():
                   "bundled_default_data": "Alzheimer.csv", "default_shape": [210, 1542],
                   "gui_included": False, "runtime": str(runtime), "host_paths_removed": True,
                   "outside_checkout": True, "cache_path_contains_spaces": True,
-                  "full_default_input_checked": full_input_checked}
+                  "full_default_input_checked": full_input_checked,
+                  "impute_training_mask_completed": len(imputed)}
         (output / "validation.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
         print("Standalone offline CLI validation passed", flush=True)
 

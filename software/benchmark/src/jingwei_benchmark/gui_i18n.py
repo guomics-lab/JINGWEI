@@ -1,6 +1,9 @@
 """Small, explicit desktop message catalog; method IDs and saved data stay stable."""
 
 MESSAGES = {
+    "任务名称（留空自动生成）": "Task name (automatic if empty)",
+    "训练缺失机制": "Training missingness",
+    "评测时构造所有方法共用的测试掩蔽；插补时仅为 JINGWEI 构造训练掩蔽，保留原始观测值作为监督目标。": "Benchmark: one shared test mask for all methods. Impute: training corruption for JINGWEI only, retaining input observations as targets.",
     "掩蔽比例": "Mask rate",
     "此机制使用固定概率，掩蔽比例由数据决定。": "This mechanism uses fixed probabilities; the realized mask rate depends on the data.",
     "计算环境检查失败": "Environment check failed",
@@ -89,7 +92,8 @@ MESSAGES = {
     "隐藏层维度": "Hidden dimensions", "学习率（JINGWEI）": "Learning rate (JINGWEI)",
     "掩蔽损失权重（JINGWEI）": "Mask loss weight (JINGWEI)",
     "单方法参数优先于通用训练设置。传统方法使用 CPU。": "Method parameters override shared training settings. Traditional methods use CPU.",
-    "训练掩蔽机制": "Training missingness", "与评测相同": "Same as evaluation", "训练掩蔽比例": "Training mask",
+    "训练掩蔽机制": "Training missingness", "与评测相同": "Same as evaluation", "训练掩蔽比例": "Training mask rate",
+    "训练掩蔽率应在 0（含）和 1 之间": "Training mask rate must be at least 0 and less than 1",
     "随机种子": "Random seed", "缺失概率的丰度水平": "Abundance for missingness",
     "每个矩阵条目": "Per entry", "每个蛋白的均值": "Per-protein mean", "Logistic 斜率（非正）": "Logistic slope (≤ 0)",
     "低丰度分位数": "Low quantile", "高丰度分位数": "High quantile", "低区间缺失概率": "Low-range probability",

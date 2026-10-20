@@ -54,7 +54,7 @@ def main():
     assert reopened["configuration"] == ui["configuration"]
     assert reopened["method_parameters"] == ui["method_parameters"]
     help_result = subprocess.run([str(console), "--help"], env=env, capture_output=True, text=True, check=True)
-    assert "jingwei-benchmark" in help_result.stdout
+    assert "usage: jingwei " in help_result.stdout and "jingwei-benchmark" not in help_result.stdout
     benchmark_help = subprocess.run([str(console), "benchmark", "--help"], env=env, capture_output=True, text=True, check=True)
     assert "all 35 methods" in benchmark_help.stdout
     assert "1800; 30 min" in " ".join(benchmark_help.stdout.split())
@@ -91,6 +91,29 @@ def main():
         gpu = pd.read_csv(output / "cuda/metrics.csv")
         assert len(gpu) == 5 and (gpu.status == "completed").all()
         assert gpu.actual_device.str.startswith("cuda").all()
+    impute_output = output / "impute-training-mask"
+    run("cli", "impute", "--input", fixture, "--methods", "mean", "jingwei-dmf", "jingwei-dcae",
+        "--mechanism", "mcar", "--mask-rate", ".25", "--device", "cpu", "--threads", "1",
+        "--max-epochs", "2", "--batch-size", "4", "--latent-dim", "4", "--hidden-dims", "8",
+        "--output", impute_output)
+    import numpy as np
+    imputed = json.loads((impute_output / "metrics.json").read_text(encoding="utf-8"))
+    assert len(imputed) == 3 and all(row["status"] == "completed" for row in imputed)
+    with np.load(impute_output / "repeat_000/masks.npz") as masks:
+        assert not masks["evaluation_hidden"].any() and masks["training_hidden"].any()
+        observed_count = int(masks["observed"].sum())
+        hidden_count = int(masks["training_hidden"].sum())
+    for method in ("jingwei-dmf", "jingwei-dcae"):
+        detail = json.loads((impute_output / f"repeat_000/{method}/worker_result.json").read_text(encoding="utf-8"))
+        assert detail["training_hidden_entries"] == hidden_count
+        assert detail["supervision_entries_per_epoch"] == observed_count
+        assert detail["training_input_entries"] == observed_count - hidden_count
+    with np.load(impute_output / "repeat_000/method_input.npz") as common:
+        assert not common["training_hidden"].any()
+    original_input = pd.read_csv(fixture, index_col=0).to_numpy()
+    for row in imputed:
+        prediction = pd.read_csv(impute_output / f"repeat_000/{row['method']}/imputed.csv", index_col=0).to_numpy()
+        np.testing.assert_allclose(prediction[np.isfinite(original_input)], original_input[np.isfinite(original_input)])
     # Exercise the actual default dataset through one shared original MNAR mask.
     # Its all-empty columns exposed the missing notebook preprocessing adapter.
     original_output = output / "alzheimer-original-mnar"
@@ -132,7 +155,8 @@ def main():
     (output / "validation.json").write_text(json.dumps({"native_ui": ui, "reopened_ui": reopened, "cpu_completed": len(cpu),
         "cuda_completed": 5 if args.cuda else 0, "conda_paths_removed": True,
         "public_console_validated": True, "alzheimer_original_mnar_completed": len(original),
-        "platform_mask_count": 1, "full_default_input_checked": full_input_checked}, indent=2), encoding="utf-8")
+        "platform_mask_count": 1, "full_default_input_checked": full_input_checked,
+        "impute_training_mask_completed": len(imputed)}, indent=2), encoding="utf-8")
     print("Frozen desktop UI and backend validation passed")
 
 

@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 import time
 import threading
@@ -70,6 +71,26 @@ def test_omitted_repeat_setting_uses_the_single_run_cli_default(tmp_path):
     job=store.submit(fixture(tmp_path),{'command':'benchmark','methods':['mean'],'device':'cpu'})
     info=wait_job(store,job)
     assert info['state']=='completed' and info['done']==info['expected']==1
+
+
+@pytest.mark.parametrize('name',['','  \t  ','My analysis'])
+def test_task_name_defaults_to_timestamp_and_matches_saved_output(tmp_path,name):
+    store=JobStore(tmp_path/'desktop')
+    output=tmp_path/'chosen-output'
+    job=store.submit(fixture(tmp_path),{'command':'benchmark','methods':['mean'],'device':'cpu'},
+        name=name,output_root=output)
+    info=wait_job(store,job)
+    assert info['state']=='completed'
+    if name.strip():
+        assert info['name']==name
+    else:
+        assert re.fullmatch(r'task-\d{8}-\d{6}',info['name'])
+        assert Path(info['folder']).name.startswith(info['name']+'-')
+        assert Path(info['folder']).name.count(info['name'][5:])==1
+    request=json.loads((Path(info['folder'])/'request.json').read_text())
+    assert request['name']==info['name'] and request['source_name']=='input.csv'
+    reopened=JobStore(tmp_path/'reopened')
+    assert reopened.info(reopened.attach(info['folder']))['name']==info['name']
 
 
 def test_cancel_stops_owned_worker_and_retains_cancelled_status(tmp_path):

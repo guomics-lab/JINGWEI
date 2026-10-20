@@ -175,6 +175,9 @@ def run_experiment(args):
         if args.methods == ["all"]
         else list(dict.fromkeys(canonical_name(n) for n in args.methods))
     )
+    training_methods = [name for name in methods if name.startswith("jingwei-")] if args.command == "impute" else []
+    if training_methods and uses_mask_rate(args.mechanism, args.paper_probabilities) and not 0 <= args.mask_rate < 1:
+        raise ValueError("JINGWEI training mask rate must be in [0,1)")
     if args.output.exists() and any(args.output.iterdir()):
         raise ValueError("output directory is not empty; choose a new --output path")
     overrides = (
@@ -268,7 +271,11 @@ def run_experiment(args):
             {"name": "fair", "evaluation": args.mechanism,
              "training": "method-owned; no platform training mask",
              "platform_mask_count": 1,
-             "normalization": "training-available observations only"}),
+             "normalization": "training-available observations only"} if args.command == "benchmark" else
+            {"name": "impute", "evaluation": "not-applied", "platform_mask_count": 0,
+             "training": "JINGWEI training corruption; original observations retained as targets",
+             "training_methods": training_methods, "training_mechanism": args.mechanism if training_methods else None,
+             "normalization": "input observations only"}),
         "device": device,
         "csv_detection": data.csv_detection,
         "platform": platform.platform(),
@@ -301,7 +308,7 @@ def run_experiment(args):
                 if args.command == "benchmark"
                 else 0
             ),
-            training_rate=0,
+            training_rate=(args.mask_rate if uses_mask_rate(args.mechanism, args.paper_probabilities) else None) if training_methods else 0,
             seed=mask_seed,
             preserve_marginals=not args.allow_empty_marginals,
             level=args.mask_level,
@@ -347,7 +354,9 @@ def run_experiment(args):
             evaluation_hidden=masks.evaluation_hidden,
             training_hidden=masks.training_hidden,
         )
-        # Workers receive only the first-corrupted data, never truth or native missing placeholders.
+        # Benchmark workers receive only the common test-corrupted data. In
+        # imputation mode the common matrix is the original input; only JINGWEI
+        # receives the separate training-corruption mask, with targets retained.
         legacy = data.notebook_reference if notebook else None
         extra = ({"notebook_normalized": np.where(masks.available, legacy["normalized"], 0).astype("float32"),
                   "notebook_mean": legacy["mean"], "notebook_std": legacy["std"],
@@ -355,12 +364,16 @@ def run_experiment(args):
         np.savez(
             repeat_dir / "method_input.npz",
             values=np.where(masks.available, truth, np.nan) if notebook else masks.method_input(truth),
-            training_hidden=masks.training_hidden,
+            training_hidden=np.zeros_like(masks.training_hidden),
             **extra,
         )
+        if training_methods:
+            np.savez(repeat_dir / "jingwei_training_input.npz",
+                     values=masks.method_input(truth), training_hidden=masks.training_hidden)
         dump_json(
             repeat_dir / "mask_config.json",
-            {**mask_metadata, "mask_seed": mask_seed, "model_seed": model_seed},
+            {**mask_metadata, "mask_seed": mask_seed, "model_seed": model_seed,
+             "training_methods": training_methods},
         )
         notebook_rng_input = None
         for method in methods:
@@ -371,7 +384,7 @@ def run_experiment(args):
                 "method": method,
                 "seed": model_seed,
                 "evaluation_rate": mask_metadata["evaluation"]["actual_rate"],
-                "training_rate": mask_metadata["training"]["actual_rate"],
+                "training_rate": mask_metadata["training"]["actual_rate"] if method in training_methods else 0.0,
                 "evaluation_scale": data.scale,
                 "zero_cols": int((~valid_columns).sum()) if original_empty_policy else 0,
             }
@@ -399,7 +412,7 @@ def run_experiment(args):
                 }
                 payload = {
                     "method": method,
-                    "input_file": str((repeat_dir / "method_input.npz").resolve()),
+                    "input_file": str((repeat_dir / ("jingwei_training_input.npz" if method in training_methods else "method_input.npz")).resolve()),
                     "folder": str(folder.resolve()),
                     "parameters": params,
                     "device": device if METHODS[method].gpu else "cpu",

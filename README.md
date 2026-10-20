@@ -23,11 +23,11 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe"><strong>Download Windows Benchmark Installer (.exe)</strong></a> ·
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.3">Linux CLI</a>
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.5/jingwei-Windows-Setup.exe"><strong>Download Windows Benchmark Installer (.exe)</strong></a> ·
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.5">Linux CLI</a>
 </p>
 
-Download one EXE and run it; the installer handles the remaining files. After installation, open **Start → JINGWEI Benchmark**.
+Download one EXE and run it; the installer handles the remaining files. After installation, open **Start → jingwei**.
 
 JINGWEI is a deep learning framework for missing proteomic data imputation, supporting both **DMF (Deep Matrix Factorization)** and **DCAE (Dilated Convolutional AutoEncoder)** methods.
 
@@ -36,7 +36,7 @@ JINGWEI is a deep learning framework for missing proteomic data imputation, supp
 | What you want to do | Use | Get started |
 | --- | --- | --- |
 | Apply **DMF / DCAE** to your data | JINGWEI Python package | [Quick start](#quick-start) · [Python API](#python-api-example) |
-| Compare **35 imputation methods** | Standalone JINGWEI Benchmark software | [Benchmark guide](software/benchmark/README.md) |
+| Compare **35 imputation methods** | Standalone jingwei software | [Benchmark guide](software/benchmark/README.md) |
 
 ## Features
 
@@ -177,18 +177,24 @@ DCAE; the published Python package and earlier installers are unchanged.
 
 ## Benchmark software
 
-[**Download Windows installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe) · [Installation](software/benchmark/RELEASE-1.0.3.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.3)
+[**Download Windows installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.5/jingwei-Windows-Setup.exe) · [Installation](software/benchmark/RELEASE-1.0.5.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.5)
 
-The download above is the published **1.0.3** installer. The local **1.0.5**
-build is named **jingwei** and bundles Python, R and method dependencies. Its
+The **1.0.5** Windows application is named **jingwei** and bundles Python, R and method dependencies. Its
 native Windows GUI supports **中文 / English** and includes `data/Alzheimer.csv`.
 
 Choose data, methods and an output folder. Run settings contain only **Task**,
 **Missingness** and **Mask rate**; device and model settings are in **Advanced**.
-Each GUI task runs once. **Log** shows live progress; **Open task…** opens saved
-results. Startup leaves results empty and completes environment checks before
+Each GUI task runs once. **Log** shows live progress; **Reuse settings** restores
+the selected task's settings and method parameters. Settings stay locked until
+the task finishes or stops. Blank task names become `task-YYYYMMDD-HHMMSS`.
+Startup leaves results empty and completes environment checks before
 showing the main window. Valid cached checks and form preferences are reused.
 The installer license is plain text.
+
+In **Impute**, Missingness and Mask rate configure training corruption for
+JINGWEI DMF/DCAE. Masked observations remain supervised targets; inference uses
+the original input and preserves its observed values. Comparison methods retain
+their own procedures. These controls configure the shared test mask in Benchmark.
 
 One test mask is shared across all methods. Every method receives the same
 corrupted dataset and owns its training/validation procedure; the platform adds
@@ -374,7 +380,7 @@ JINGWEI/
 │       ├── dmf.py             # DMF trainer
 │       └── dcae.py            # DCAE trainer
 ├── software/
-│   └── benchmark/            # Standalone JINGWEI Benchmark application
+│   └── benchmark/            # Standalone jingwei application
 │       ├── README.md          # End-user documentation
 │       ├── src/               # Application source
 │       ├── tests/             # Application tests

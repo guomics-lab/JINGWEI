@@ -6,7 +6,7 @@ import time
 
 
 def main():
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QPushButton
     from PySide6.QtGui import QFontDatabase, QFont
     from PySide6.QtTest import QTest
     from PySide6.QtCore import Qt, QTimer
@@ -93,8 +93,16 @@ def main():
             assert not {"evaluation_protocol", "training_mechanism", "training_mask_rate", "seed"} & window.fields.keys()
             assert not hasattr(window, "protocol_summary")
             assert window.run_settings_form.rowCount() == 3
+            assert not any(button.text() == window.t("打开任务…") for button in window.findChildren(QPushButton))
             assert window.brand_label.text() == "jingwei"
             assert window.configuration()["repeats"] == 1
+            set_value(window.fields["command"], "impute")
+            window.mode_changed()
+            assert window.fields["mechanism"].isEnabled()
+            assert window.fields["mask_rate"].isEnabled()
+            assert window.field_labels["mask_rate"].text() == window.t("训练掩蔽比例")
+            set_value(window.fields["command"], "benchmark")
+            window.mode_changed()
             set_value(window.fields["device"], "cpu")
             window.set_language("zh")
             state["configuration"] = window.configuration()
@@ -107,6 +115,8 @@ def main():
             window.grab().save(str(output / "desktop-input-en.png"))
             window.grab().save(str(output / "desktop-input.png"))
             QTest.mouseClick(window.start_button, Qt.LeftButton)
+            assert not window.configuration_panel.isEnabled()
+            assert not window.clone_button.isEnabled()
             state["phase"] = "running"
             timer.start(200)
         elif state["phase"] == "running" and window.selected_job:
@@ -115,9 +125,17 @@ def main():
                 assert window.configuration() == state["configuration"]
                 state["switched_while_running"] = True
             info = window.store.info(window.selected_job)
+            if info["state"] not in TERMINAL:
+                assert not window.configuration_panel.isEnabled()
+                assert not any(window.fields[key].isEnabled() for key in ("max_epochs", "mask_rate", "command"))
+                if not state.get("captured_locked"):
+                    window.grab().save(str(output / "desktop-running-locked.png"))
+                    state["captured_locked"] = True
             if info["state"] in TERMINAL:
                 timer.stop()
                 window.refresh_jobs()
+                assert window.configuration_panel.isEnabled()
+                assert window.clone_button.isEnabled()
                 assert "Completed" in window.log_view.toPlainText()
                 assert Path(info["folder"]).parent == output / "chosen output"
                 rows = read_json(Path(info["folder"]) / "results/metrics.json")
@@ -145,6 +163,10 @@ def main():
                     "startup_without_task": True, "custom_output": str(output / "chosen output"),
                     "live_log": bool(window.log_view.toPlainText()),
                     "manual_task_open": True, "repeats_control_removed": "repeats" not in window.fields,
+                    "configuration_locked_while_running": state.get("captured_locked", False),
+                    "configuration_unlocked_after_completion": window.configuration_panel.isEnabled(),
+                    "open_task_button_removed": True,
+                    "impute_training_mask_controls": True,
                     "run_settings_rows": window.run_settings_form.rowCount(),
                     "startup_environment_ready_before_main": gate.ready_before_show,
                     "application_name": app.applicationName(),

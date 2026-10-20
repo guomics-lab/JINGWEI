@@ -161,7 +161,11 @@ class WorkbenchLayout:
         splitter = QSplitter(Qt.Horizontal)
         self.main_splitter = splitter
         left = QWidget()
-        config = QVBoxLayout(left)
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(8)
+        self.configuration_panel = QWidget()
+        config = QVBoxLayout(self.configuration_panel)
         config.setContentsMargins(0, 0, 0, 0)
         config.setSpacing(8)
         data = self.group("数据", config)
@@ -237,7 +241,6 @@ class WorkbenchLayout:
         self.mask_rate_stack.addWidget(self.automatic_mask_rate)
         self.field_labels["mask_rate"] = self.label("掩蔽比例")
         form.addRow(self.field_labels["mask_rate"], self.mask_rate_stack)
-        self.bind(self.fields["mask_rate"], "训练掩蔽只从评测掩蔽后剩余的观测值中抽取。评测真值不传入方法。", "setToolTip")
         settings.addLayout(form)
         output = QHBoxLayout()
         output.addWidget(self.label("输出目录"))
@@ -246,8 +249,9 @@ class WorkbenchLayout:
         output.addWidget(self.output_root, 1)
         output.addWidget(self.button("选择", self.choose_output))
         config.addLayout(output)
-        self.job_name = self.bind(QLineEdit(), "任务名称（可选）", "setPlaceholderText")
+        self.job_name = self.bind(QLineEdit(), "任务名称（留空自动生成）", "setPlaceholderText")
         config.addWidget(self.job_name)
+        left_layout.addWidget(self.configuration_panel, 1)
         row = QHBoxLayout()
         self.start_button = self.button("开始", self.start_job)
         self.start_button.setObjectName("primary")
@@ -257,17 +261,16 @@ class WorkbenchLayout:
         self.cancel_button.setEnabled(False)
         row.addWidget(self.start_button, 2)
         row.addWidget(self.cancel_button, 1)
-        config.addLayout(row)
+        left_layout.addLayout(row)
         splitter.addWidget(left)
         right = QWidget()
         results = QVBoxLayout(right)
         results.setContentsMargins(8, 4, 0, 0)
         results.setSpacing(8)
         top = QHBoxLayout()
-        self.current_task_label = self.label("尚未打开任务", True)
+        self.current_task_label = self.label("尚无任务", True)
         self.current_task_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         top.addWidget(self.current_task_label, 1)
-        top.addWidget(self.button("打开任务…", self.choose_task))
         results.addLayout(top)
         actions = QHBoxLayout()
         self.progress_label = self.label("尚无任务", True)
@@ -278,6 +281,8 @@ class WorkbenchLayout:
             button.setEnabled(False)
             actions.addWidget(button)
             self.job_actions.append(button)
+            if label == "复制配置":
+                self.clone_button = button
         results.addLayout(actions)
         self.progress = QProgressBar()
         self.progress.setValue(0)
@@ -498,14 +503,17 @@ class WorkbenchLayout:
             box.item.setText(0, self.t(self.method_label(name)))
         evaluation = value(self.fields["mechanism"])
         benchmark = value(self.fields["command"]) == "benchmark"
-        self.fields["mechanism"].setEnabled(benchmark)
+        self.fields["mechanism"].setEnabled(True)
         uncalibrated = value(self.fields["paper_probabilities"])
         controlled = uses_mask_rate(evaluation, uncalibrated)
-        self.fields["mask_rate"].setEnabled(benchmark and controlled)
+        self.fields["mask_rate"].setEnabled(controlled)
         self.mask_rate_stack.setCurrentIndex(0 if controlled else 1)
-        custom = ({evaluation} - {"mcar", ORIGINAL_MECHANISM}) if benchmark else set()
+        self.field_labels["mechanism"].setText(self.t("缺失机制" if benchmark else "训练缺失机制"))
+        self.field_labels["mask_rate"].setText(self.t("掩蔽比例" if benchmark else "训练掩蔽比例"))
+        self.mask_rate_stack.setToolTip(self.t("评测时构造所有方法共用的测试掩蔽；插补时仅为 JINGWEI 构造训练掩蔽，保留原始观测值作为监督目标。"))
+        custom = {evaluation} - {"mcar", ORIGINAL_MECHANISM}
         for key in ("mask_level", "paper_probabilities", "allow_empty_marginals"):
-            self.fields[key].setEnabled(benchmark and bool(custom or (key == "allow_empty_marginals" and evaluation == "mcar")))
+            self.fields[key].setEnabled(bool(custom or (key == "allow_empty_marginals" and evaluation == "mcar")))
         for key, mechanisms in {
             "logistic_slope": {"mnar-logistic"}, "low_quantile": {"mnar-jingwei", "mnar-threshold"},
             "high_quantile": {"mnar-jingwei"}, "low_probability": {"mnar-jingwei", "mnar-threshold"},
@@ -588,6 +596,7 @@ class WorkbenchLayout:
         self.update_data_labels()
         self.update_environment_labels()
         self.update_method_count()
+        self.update_mask_controls()
         self._last_result_digest = None
         self.refresh_jobs()
         if selected_row >= 0:

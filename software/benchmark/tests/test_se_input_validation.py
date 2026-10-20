@@ -61,7 +61,7 @@ def test_bad_csv_reports_a_controlled_error_without_traceback(tmp_path, capsys, 
     source.write_text(contents)
     assert main(['inspect', '--input', str(source)]) == 1
     captured = capsys.readouterr()
-    assert 'jingwei-benchmark:' in captured.err
+    assert 'jingwei:' in captured.err
     assert 'Traceback' not in captured.err
 
 

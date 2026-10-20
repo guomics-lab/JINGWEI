@@ -13,7 +13,7 @@ license = { text = "PolyForm Noncommercial 1.0.0" }
 dependencies = []
 
 [project.scripts]
-jingwei-benchmark = "jingwei_benchmark.cli:main"
+jingwei = "jingwei_benchmark.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

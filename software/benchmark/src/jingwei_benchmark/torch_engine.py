@@ -168,11 +168,12 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed):
         "torch_version": torch.__version__, "training_engine": "torch",
         "training_protocol": ("fixed model-supplied mask; supervision on remaining observations" if training_hidden.any()
                               else "method-owned training on common evaluation-corrupted input; no platform training mask"),
-        "normalization": "per-feature mean/std fitted after evaluation masking",
+        "normalization": "per-feature mean/std fitted on method input observations",
         "dmf_factorized_first_linear": factorized,
         "precision": "float32", "epochs_trained": epochs, "training_steps": steps,
         "supervision_entries_per_epoch": int(available.sum()),
         "training_input_entries": int((available & ~training_hidden).sum()),
+        "training_hidden_entries": int(training_hidden.sum()),
         "initialization_s": initialized - started, "training_s": trained - initialized,
         "prediction_s": finished - trained,
         "model_parameters": sum(parameter.numel() for parameter in model.parameters()),
