@@ -20,6 +20,7 @@ def main():
     parser.add_argument("--icon", required=True, type=Path)
     parser.add_argument("--base-url", default=f"https://github.com/guomics-lab/JINGWEI/releases/download/v{__version__}")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--installed-size", type=int, help="unpacked application bytes (defaults to the icon's application folder)")
     parser.add_argument("--test-server", action="store_true", help="allow a loopback HTTP fixture; never publish this build")
     args = parser.parse_args()
     url = urlparse(args.base_url)
@@ -29,6 +30,14 @@ def main():
     payload = (args.payload or APPLICATION / f"dist/releases/v{__version__}").resolve()
     output = (args.output or payload).resolve()
     output.mkdir(parents=True, exist_ok=True)
+    installed_size = args.installed_size
+    if installed_size is None:
+        app_folder = args.icon.resolve().parent
+        if not (app_folder / "jingwei.exe").is_file():
+            parser.error("place --icon in the built application folder, or supply --installed-size")
+        installed_size = sum(p.stat().st_size for p in app_folder.rglob("*") if p.is_file())
+    if installed_size <= 0:
+        parser.error("--installed-size must be positive")
     staging = ROOT / "build" / ("benchmark-bootstrap-test" if args.test_server else "benchmark-bootstrap")
     staging.mkdir(parents=True, exist_ok=True)
     prefix = f"jingwei-{__version__}-windows-x86_64-setup"
@@ -52,10 +61,12 @@ def main():
     verify.write_text("procedure VerifyPayload;\nbegin\n" + "\n".join(checks) + "\nend;\n\n"
                       "procedure DeletePayload;\nbegin\n" + "\n".join(cleanup) + "\nend;\n", encoding="utf-8")
     subprocess.run([str(args.iscc.resolve()), f"/DAppVersion={__version__}", f"/DReleaseDir={output}",
+                    f"/DAppLicense={APPLICATION / 'LICENSE.txt'}", f"/DInstalledSize={installed_size}",
                     f"/DAppIcon={args.icon.resolve()}", f"/DPayloadExe={prefix}.exe",
                     f"/DPayloadInclude={include}", f"/DVerifyInclude={verify}", str(BUILD / "windows-bootstrap.iss")], check=True)
     (output / "windows-installer-manifest.json").write_text(
-        json.dumps({"version": __version__, "test_only": args.test_server, "files": manifest}, indent=2), encoding="utf-8")
+        json.dumps({"version": __version__, "test_only": args.test_server,
+                    "installed_size": installed_size, "wizard": "single", "files": manifest}, indent=2), encoding="utf-8")
     print("Windows single-download installer:", output / "jingwei-Windows-Setup.exe")
 
 

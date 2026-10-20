@@ -4,10 +4,12 @@ import subprocess
 import sys
 import numpy as np
 import pandas as pd
+import pytest
 from jingwei_benchmark.cli import main
 
 
-def test_all_35_methods_receive_identical_single_mask_input(tmp_path,monkeypatch):
+@pytest.mark.parametrize('mechanism', ['mcar', 'mnar-jingwei-v2'])
+def test_all_35_methods_receive_identical_single_mask_input(tmp_path,monkeypatch,mechanism):
     import hashlib
     import jingwei_benchmark.benchmark as orchestration
     from jingwei_benchmark.methods import METHODS
@@ -28,7 +30,7 @@ def test_all_35_methods_receive_identical_single_mask_input(tmp_path,monkeypatch
     monkeypatch.setattr(orchestration,'_run_worker',worker)
     output=tmp_path/'all-methods'
     assert main(['benchmark','--input',str(source),'--methods','all','--device','cpu',
-                 '--output',str(output)])==0
+                 '--mechanism',mechanism,'--output',str(output)])==0
     assert {r[0] for r in received}==set(METHODS) and len(received)==35
     assert len({(r[1],r[2]) for r in received})==1
     manifest=json.loads((output/'manifest.json').read_text())

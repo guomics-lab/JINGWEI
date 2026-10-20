@@ -50,7 +50,10 @@ def test_public_and_bundled_global_model_are_numerically_identical(monkeypatch):
 
 
 @pytest.mark.parametrize('architecture',['native','global'])
-def test_public_imputer_matches_bundled_training_and_inference(architecture,monkeypatch):
+def test_public_imputer_matches_bundled_reconstruction_and_inference(architecture,monkeypatch):
+    # Architecture, reconstruction and inference remain shared. The standalone
+    # app's corrected full-mask BCE is independently tested in test_torch_engine;
+    # this change does not revise the separately published package's objective.
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3]/'src'))
     from jingwei import DCAEImputer as Public
     from jingwei_benchmark._native.dcae import DCAEImputer as Bundled
@@ -61,7 +64,7 @@ def test_public_imputer_matches_bundled_training_and_inference(architecture,monk
     visible=supervision.clone();visible[1,1:4]=0
     kwargs=dict(full_data_tensor=data,full_mask_tensor=visible,supervision_mask_tensor=supervision,
         ae_dim=4,mask_predictor_hidden_dim=8,num_encoder_blocks=1,num_decoder_blocks=1,
-        dilation=2,lambda_mask=.5,ae_architecture=architecture)
+        dilation=2,lambda_mask=0.,ae_architecture=architecture)
     torch.manual_seed(30);public=Public(**kwargs)
     torch.manual_seed(30);bundled=Bundled(**kwargs)
     batch=next(iter(public.train_dataloader()))

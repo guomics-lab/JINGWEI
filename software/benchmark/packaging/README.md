@@ -70,13 +70,15 @@ V1.0.1 adds the primary, single-download Windows installer:
 
 ```powershell
 python software/benchmark/packaging/build_bootstrap.py --iscc "C:\path\to\ISCC.exe" `
-  --payload "software/benchmark/dist/releases/v1.0.5" `
+  --payload "software/benchmark/dist/releases/v1.0.6" `
   --icon "software/benchmark/dist/windows-x86_64/jingwei/jingwei.ico"
 ```
 
 Build the offline payload first. The bootstrap includes immutable GitHub asset
 URLs, exact sizes and SHA-256 hashes. Inno Setup downloads and verifies those
-files, then invokes the same offline setup; only that setup registers the app
+files, then invokes the same offline setup silently within one visible wizard;
+the wizard always offers an editable destination with Browse, including upgrades.
+Only the offline payload registers the app
 and its uninstaller. Verified payload files are cached for retries and removed
 after a successful installation. `windows-installer-manifest.json` records the
 exact payload. A loopback-only `--test-server` mode is for negative fixtures;

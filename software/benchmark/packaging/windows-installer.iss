@@ -23,6 +23,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
+DisableDirPage=no
 WizardStyle=modern
 SetupIconFile={#SourceDir}\jingwei.ico
 UninstallDisplayIcon={app}\jingwei.exe

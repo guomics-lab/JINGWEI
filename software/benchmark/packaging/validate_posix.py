@@ -62,7 +62,7 @@ def main():
                             row[j] = ""
                 writer.writerow([f"S{i:02d}", *row])
         common = ["benchmark", "--input", source, "--repeats", "1", "--mask-rate", ".05",
-                  "--threads", "1", "--max-epochs", "1", "--batch-size", "4", "--latent-dim", "4",
+                  "--threads", "1", "--training-policy", "fixed", "--max-epochs", "1", "--batch-size", "4", "--latent-dim", "4",
                   "--hidden-dims", "8", "--timeout", "180"]
         methods = ["all"] if args.all_methods else ["mean", "bpca", "jingwei-dmf", "pimms-vae"]
         run(*common, "--methods", *methods, "--device", "cpu", "--output", output / "cpu")
@@ -92,7 +92,7 @@ def main():
         impute_output = output / "impute-training-mask"
         run("impute", "--input", source, "--methods", "mean", "jingwei-dmf", "jingwei-dcae",
             "--mechanism", "mcar", "--mask-rate", ".25", "--device", "cpu", "--threads", "1",
-            "--max-epochs", "2", "--batch-size", "4", "--latent-dim", "4", "--hidden-dims", "8",
+            "--training-policy", "fixed", "--max-epochs", "2", "--batch-size", "4", "--latent-dim", "4", "--hidden-dims", "8",
             "--output", impute_output)
         import numpy as np
         imputed = json.loads((impute_output / "metrics.json").read_text(encoding="utf-8"))

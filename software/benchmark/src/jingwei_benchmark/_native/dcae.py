@@ -106,9 +106,9 @@ class DCAEImputer(pl.LightningModule):
         else:
             recon_loss = x_recon.sum() * 0.0
 
-        if self.lambda_mask > 0 and observed.any():
+        if self.lambda_mask > 0:
             mask_loss = F.binary_cross_entropy_with_logits(
-                mask_logits[observed], mask_batch[observed].float()
+                mask_logits, mask_batch.float()
             )
         else:
             mask_loss = mask_logits.sum() * 0.0

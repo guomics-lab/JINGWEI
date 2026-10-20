@@ -192,6 +192,7 @@ class RunTableModel(QAbstractTableModel):
                 return str(section + 1)
             key = self.columns[section]
             labels = {"repeat": "重复", "method": "方法名称", "status": "状态", "time_s": "耗时（秒）",
+                      "convergence_status": "收敛状态", "epochs_trained": "实际轮数", "best_epoch": "最佳轮数",
                       "W2_n_samples": "W2 样本数", "W2_n_features": "W2 蛋白数", "W2_n_evaluated": "W2 评测数"}
             return self.t(labels.get(key, key))
 
@@ -203,6 +204,10 @@ class RunTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             if key == "status":
                 return self.t(STATE_LABELS.get(cell, cell or "—"))
+            if key == "convergence_status":
+                return self.t({"validation_plateau":"验证已稳定", "max_epochs":"达到训练上限",
+                    "fixed_budget":"固定预算", "insufficient_validation":"验证数据不足",
+                    "not_applicable":"不适用", "not_assessed":"未评估"}.get(cell, cell or "—"))
             return "—" if cell is None else f"{cell:.5g}" if isinstance(cell, float) else str(cell)
         if role == Qt.ToolTipRole:
             return row.get("error") or row.get("W2_note") or ""
@@ -738,7 +743,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             return
         info = self.store.info(self.selected_job)
         runs = pd.DataFrame(info["runs"])
-        columns = ["repeat", "method", "status", "MSE", "RMSE", "MAE", "NRMSE", "Pearson", "Spearman", "W2", "W2_n_samples", "W2_n_features", "W2_n_evaluated", "time_s"]
+        columns = ["repeat", "method", "status", "convergence_status", "epochs_trained", "best_epoch", "MSE", "RMSE", "MAE", "NRMSE", "Pearson", "Spearman", "W2", "W2_n_samples", "W2_n_features", "W2_n_evaluated", "time_s"]
         self.run_model.replace(info["runs"], columns)
         benchmark = info["config"].get("command") == "benchmark"
         multiple = info["config"].get("repeats", 1) > 1

@@ -64,9 +64,10 @@ def test_three_run_controls_and_shared_rate_in_both_tasks(tmp_path,monkeypatch):
         assert config['mask_rate']==.35
         assert not {'training_mask_rate','training_mechanism'} & config.keys()
         assert config['evaluation_protocol']=='fair' and config['seed']==0
-        assert win.fields['mechanism'].isEnabled()==(mode=='benchmark')
+        assert win.fields['mechanism'].isEnabled()
     win.fields['mechanism'].setCurrentIndex(win.fields['mechanism'].findData('mnar-jingwei-original'))
     assert win.mask_rate_stack.currentIndex()==1 and not win.fields['mask_rate'].isEnabled()
     win.set_language('en')
-    assert win.automatic_mask_rate.text()=='Auto'
+    assert win.automatic_mask_rate.text()=='Fixed probabilities'
+    assert win.fields['mechanism'].currentText()=='Legacy rule (old tasks)'
     win.close()

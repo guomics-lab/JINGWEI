@@ -327,6 +327,13 @@ def run_experiment(args):
         print(f"Mask | observed={int(masks.observed.sum())} | evaluation={int(masks.evaluation_hidden.sum())} | "
               f"available={int(masks.available.sum())} | training={int(masks.training_hidden.sum())} | "
               f"empty features={int((~masks.available.any(axis=0)).sum())}", flush=True)
+        for stage in ("evaluation", "training"):
+            detail = mask_metadata[stage]
+            if detail.get("mechanism"):
+                requested = detail.get("requested_rate")
+                requested_text = "fixed probabilities" if requested is None else f"{requested:.2%}"
+                print(f"Mask rate | {stage} | {detail['mechanism']} | requested={requested_text} | "
+                      f"actual={detail['actual_rate']:.2%}", flush=True)
         repeat_dir.mkdir()
         original_empty_policy = not notebook and args.mechanism == ORIGINAL_MECHANISM
         valid_columns = masks.available.any(axis=0) if original_empty_policy else np.ones(truth.shape[1], dtype=bool)
@@ -387,6 +394,7 @@ def run_experiment(args):
                 "training_rate": mask_metadata["training"]["actual_rate"] if method in training_methods else 0.0,
                 "evaluation_scale": data.scale,
                 "zero_cols": int((~valid_columns).sum()) if original_empty_policy else 0,
+                "convergence_status": "not_assessed", "converged": None,
             }
             cancel_file = getattr(args, "cancel_file", None)
             if cancel_file and Path(cancel_file).exists():
@@ -394,20 +402,28 @@ def run_experiment(args):
             elif not status[method]["available"]:
                 result = {"status": "skipped", "error": status[method]["reason"]}
             else:
+                preset = preset_parameters("original-benchmark" if notebook else getattr(args, "jingwei_preset", "standard"), method)
+                if not notebook and args.training_policy == "convergence":
+                    # Historical hyperparameters must not reintroduce the old
+                    # 50-epoch budget into validation-based stopping.
+                    preset.pop("max_epochs", None)
                 params = {
                     "training_engine": getattr(args, "training_engine", "torch"),
                     "baseline_engine": getattr(args, "baseline_engine", "optimized"),
                     "mice_backend": getattr(args, "mice_backend", "python"),
                     "threads": args.threads,
                     "max_epochs": args.max_epochs,
-                    "batch_size": args.batch_size,
+                    "training_policy": "fixed" if notebook else args.training_policy,
+                    "patience": args.patience, "min_epochs": args.min_epochs,
+                    "min_delta": args.min_delta, "validation_fraction": args.validation_fraction,
+                    "batch_size": args.cf_batch_size if method == "pimms-cf" else args.batch_size,
                     "latent_dim": args.latent_dim,
                     "hidden_dims": args.hidden_dims,
                     "learning_rate": args.learning_rate,
                     "mask_weight": args.mask_weight,
                     "ae_architecture": getattr(args, "ae_architecture", None) or ("native" if notebook else "global"),
                     "evaluation_protocol": "original-notebook" if notebook else "fair",
-                    **preset_parameters("original-benchmark" if notebook else getattr(args, "jingwei_preset", "standard"), method),
+                    **preset,
                     **overrides.get(method, {}),
                 }
                 payload = {

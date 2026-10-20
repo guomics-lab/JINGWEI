@@ -20,7 +20,7 @@ from jingwei_benchmark.methods import METHODS
 
 
 def until(app, predicate):
-    deadline=time.monotonic()+45
+    deadline=time.monotonic()+120
     while time.monotonic()<deadline:
         app.processEvents()
         if predicate():return
@@ -111,7 +111,7 @@ def test_gui_imputation_runs_native_training_mask_and_preserves_input(window):
     app,win,source,errors=window
     win.select_methods(['jingwei-dmf','jingwei-dcae','mean'])
     win.fields['command'].setCurrentIndex(win.fields['command'].findData('impute'))
-    for key,setting in {'mask_rate':.3,'max_epochs':2,'latent_dim':4,'hidden_dims':[8],'batch_size':4,'threads':1}.items():
+    for key,setting in {'training_policy':'fixed','mask_rate':.3,'max_epochs':2,'latent_dim':4,'hidden_dims':[8],'batch_size':4,'threads':1}.items():
         set_value(win.fields[key],setting)
     until(app,lambda:win.preview_data is not None)
     win.start_job()

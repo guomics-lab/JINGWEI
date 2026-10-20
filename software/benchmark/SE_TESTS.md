@@ -1,5 +1,44 @@
 # Software verification
 
+## MNAR v2 and validation stopping — 2026-10-20
+
+This experiment belongs to software 1.0.6 and supersedes no historical task
+record. The full Alzheimer input has 210 samples, 1,542 proteins and 255,165
+observations. Target MNAR rate 20% hid 50,790 observations (19.9048%), leaving
+204,375 common input entries, no empty columns and no platform training mask.
+All seven methods received the same input bytes. In the lowest/highest
+within-protein abundance quintiles, realized mask rates were 43.9735%/5.2456%.
+
+The five neural adapters independently selected the same 20,438 validation
+entries from available input using the recorded model seed. These entries
+exclude all test/native missing positions. Training normalization excludes
+validation; test intensity targets never reach a worker. Defaults were minimum
+30 epochs, patience 30, relative tolerance 1e-4 and a 5,000-epoch safety cap.
+Each run stopped on its validation objective and restored its best checkpoint.
+
+| Method | Epochs run | Best epoch | Test MSE |
+| --- | ---: | ---: | ---: |
+| jingwei-dmf | 57 | 30 | 1.001116 |
+| jingwei-dcae | 68 | 38 | 0.576835 |
+| pimms-dae | 95 | 65 | 0.605729 |
+| pimms-vae | 62 | 32 | 0.656878 |
+| pimms-cf | 35 | 5 | 0.676204 |
+| mean | — | — | 1.006040 |
+| knn | — | — | 0.665941 |
+
+These are one experiment on one fixed mask, with validation-based selection;
+they are not a claim of global optimizer convergence or universal superiority.
+PIMMS retains its models/losses/LR finder with validation-plateau fitting instead
+of a cap-dependent one-cycle schedule. CF uses its native 4,096-entry batch;
+row models use 64 samples. Predictions were independently rescored; available
+values, validation-mask hashes, best epochs and all five checkpoints verified.
+
+Evidence: `results/mnar-result-audit-20261020/AD-convergence-verification.json`,
+`AD-convergence-summary.csv`, and the complete replayable run at
+`results/mnar-v2-20261020/alzheimer-convergence/`. Test-based hyperparameter
+selection was not performed. Earlier sections below retain their original
+version/protocol scope; their numerical rows do not describe MNAR v2.
+
 ## Current Alzheimer GUI reference — 2026-10-20
 
 The current frozen Windows 1.0.5 GUI job runner completed all ten selected

@@ -4,7 +4,11 @@ import math
 
 # name: (label, default, lower, upper); list values use comma-separated positive dimensions.
 NEURAL = {
-    "max_epochs": ("训练轮数", 50, 1, 100000),
+    "max_epochs": ("最大训练轮数", 5000, 1, 100000),
+    "patience": ("早停等待轮数", 30, 1, 100000),
+    "min_epochs": ("最少训练轮数", 30, 1, 100000),
+    "min_delta": ("验证相对改善阈值", .0001, .00000001, .99),
+    "validation_fraction": ("模型验证比例", .1, .001, .5),
     "batch_size": ("批次大小", 64, 1, 100000),
     "latent_dim": ("潜在维度", 64, 1, 100000),
     "hidden_dims": ("隐藏层维度", [256, 128], None, None),
@@ -46,6 +50,7 @@ for name in ("pimms-dae", "pimms-vae", "pimms-cf"):
     PARAMETERS[name].pop("learning_rate")
     PARAMETERS[name].pop("mask_weight")
 PARAMETERS["pimms-cf"].pop("hidden_dims")
+PARAMETERS["pimms-cf"]["batch_size"] = ("条目批次大小", 4096, 1, 1000000)
 
 
 def valid_overrides(name, settings):

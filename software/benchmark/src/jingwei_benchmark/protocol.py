@@ -1,16 +1,69 @@
-"""MNAR probabilities and sequential evaluation/training masks."""
+"""Abundance-dependent missingness and shared evaluation masks."""
 
 import numpy as np
 from scipy.special import expit
 from .masking import BenchmarkMasks, sample_hidden_mask
 
 ORIGINAL_MECHANISM = "mnar-jingwei-original"
-MECHANISMS = ("mcar", "mnar-logistic", "mnar-threshold", "mnar-jingwei", ORIGINAL_MECHANISM)
+JINGWEI_MECHANISM = "mnar-jingwei-v2"
+MECHANISMS = ("mcar", "mnar-logistic", "mnar-threshold", "mnar-jingwei", ORIGINAL_MECHANISM, JINGWEI_MECHANISM)
 
 
 def uses_mask_rate(mechanism, uncalibrated=False):
     """Whether the requested rate controls this stage (shared by CLI and GUI)."""
-    return mechanism == "mcar" or (mechanism != ORIGINAL_MECHANISM and not uncalibrated)
+    return mechanism in ("mcar", JINGWEI_MECHANISM) or (mechanism != ORIGINAL_MECHANISM and not uncalibrated)
+
+
+def jingwei_logits(values, eligible, slope=-1.0):
+    """Negative within-protein z-scores, all computed on one working scale.
+
+    Scaling each column before computing moments avoids overflow while keeping
+    its z-scores unchanged. Empty/constant columns have z=0. Only eligible
+    entries contribute; no imputed or unavailable intensity is consulted.
+    """
+    if not np.isfinite(slope) or slope >= 0:
+        raise ValueError("JINGWEI MNAR slope must be finite and negative")
+    measured = np.where(eligible, values, 0.)
+    amplitude = np.max(np.abs(measured), axis=0, initial=0.)
+    scaled = np.divide(measured, amplitude, out=np.zeros_like(measured), where=amplitude > 0)
+    counts = eligible.sum(axis=0)
+    mean = np.divide(scaled.sum(axis=0), counts, out=np.zeros(values.shape[1]), where=counts > 0)
+    centered = np.where(eligible, scaled - mean, 0.)
+    variance = np.divide((centered ** 2).sum(axis=0), counts,
+                         out=np.zeros(values.shape[1]), where=counts > 0)
+    z = np.divide(centered, np.sqrt(variance), out=np.zeros_like(centered), where=variance > 0)
+    logits = slope * z
+    if not np.isfinite(logits).all():
+        raise ValueError("JINGWEI MNAR logits are nonfinite; reduce the slope magnitude")
+    return logits
+
+
+def calibrate_logits(logits, eligible, rate):
+    """Fit a single intercept so mean Bernoulli probability equals rate.
+
+    p_ij = sigmoid(slope * z_ij + intercept). Changing the intercept preserves
+    the strict abundance ordering for each nonconstant protein. Unlike clipped
+    probability multiplication, it does not saturate part of the population.
+    The requested rate is an expectation; the realized draw is recorded too.
+    """
+    if rate is None or not np.isfinite(rate) or not 0 <= rate <= 1:
+        raise ValueError("JINGWEI MNAR requires a mask rate in [0,1]")
+    scores = logits[eligible]
+    if not scores.size or rate == 0:
+        return np.zeros_like(logits), None
+    if rate == 1:
+        return eligible.astype(float), None
+    desired_logit = float(np.log(rate) - np.log1p(-rate))
+    lower = desired_logit - float(scores.max())
+    upper = desired_logit - float(scores.min())
+    for _ in range(80):
+        middle = lower / 2 + upper / 2
+        if expit(scores + middle).mean() < rate:
+            lower = middle
+        else:
+            upper = middle
+    intercept = lower / 2 + upper / 2
+    return np.where(eligible, expit(logits + intercept), 0.), intercept
 
 
 def _original_probabilities(values, eligible):
@@ -60,6 +113,8 @@ def missing_probabilities(
         raise ValueError(f"unknown mechanism: {mechanism}")
     if mechanism == ORIGINAL_MECHANISM:
         return _original_probabilities(values, eligible)
+    if mechanism == JINGWEI_MECHANISM:
+        return np.where(eligible, expit(jingwei_logits(values, eligible, slope)), 0.)
     if not 0 <= low_quantile < high_quantile <= 1:
         raise ValueError("quantiles must satisfy 0 <= low < high <= 1")
     if any(
@@ -180,8 +235,16 @@ def protocol_masks(
         original = name == ORIGINAL_MECHANISM
         random_seed = None
         expected_rate = None
+        intercept = None
+        probabilities = None
         if name == "mcar":
             hidden = sample_hidden_mask(eligible, 0.2 if rate is None else rate, rng)
+        elif name == JINGWEI_MECHANISM:
+            slope = parameters.get("slope", -1.)
+            logits = jingwei_logits(working_values, eligible, slope)
+            probabilities, intercept = calibrate_logits(logits, eligible, rate)
+            hidden = eligible & (rng.random(eligible.shape) < probabilities)
+            expected_rate = float(probabilities[eligible].mean()) if eligible.any() else 0.
         elif original:
             import torch
 
@@ -213,18 +276,26 @@ def protocol_masks(
                 float(hidden.sum() / eligible.sum()) if eligible.any() else 0.0
             ),
             "marginal_repairs": repairs,
-            "probability_mode": ("original-repository" if original else
+            "probability_mode": ("calibrated-log-odds" if name == JINGWEI_MECHANISM else
+                                 "original-repository" if original else
                                  "fixed-count" if name == "mcar" else
                                  "uncalibrated" if rate is None else "calibrated"),
             "probability_mean": expected_rate,
-            "value_scale": "working" if original else "declared-input",
-            "statistics_scope": "eligible-per-feature" if original else parameters.get("level", "entry"),
+            "value_scale": "working" if original or name == JINGWEI_MECHANISM else "declared-input",
+            "statistics_scope": "eligible-per-feature" if original or name == JINGWEI_MECHANISM else parameters.get("level", "entry"),
             "marginal_preservation": bool(preserve_marginals and not original),
             "rng": "torch-cpu-float32-column-major" if original else "numpy-PCG64",
             "random_seed": random_seed,
             "rule": ("CSVDataset.get_mask: z compared to raw mean-k*std; strict bands; p=0.9/0.5/0.3"
-                     if original else name),
+                     if original else "p=sigmoid(slope*z+intercept); z=(working-mean)/std per protein"
+                     if name == JINGWEI_MECHANISM else name),
         }
+        if probabilities is not None and eligible.any():
+            metadata[stage].update(probability_min=float(probabilities[eligible].min()),
+                                   probability_max=float(probabilities[eligible].max()))
+        if name == JINGWEI_MECHANISM:
+            metadata[stage].update(rule_version=2, intercept=intercept,
+                                   slope=parameters.get("slope", -1.))
         return hidden
 
     evaluation = draw(

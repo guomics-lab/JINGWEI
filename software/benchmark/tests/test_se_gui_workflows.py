@@ -261,7 +261,7 @@ def test_original_mnar_gui_runs_one_shared_reference_mask(window, tmp_path):
     assert meta['training']['probability_mode']=='not-applied'
     assert win.paired.isHidden() and win.result_table.isColumnHidden(0)
     win.set_language('en')
-    assert win.automatic_mask_rate.text()=='Auto'
+    assert win.automatic_mask_rate.text()=='Fixed probabilities'
     win.fields['mechanism'].setCurrentIndex(win.fields['mechanism'].findData('mcar'))
     assert win.fields['mask_rate'].isEnabled()
     assert win.mask_rate_stack.currentIndex()==0

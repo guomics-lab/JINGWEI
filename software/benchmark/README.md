@@ -16,10 +16,10 @@ runs on CPU. GPU execution requires the machine's NVIDIA driver.
 
 ## Windows
 
-Download and run the [Windows installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.5/jingwei-Windows-Setup.exe).
+Download and run the [Windows installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.6/jingwei-Windows-Setup.exe).
 It automatically downloads and verifies the complete application. Install once,
 then open **Start → jingwei**. No manual BIN downloads are required.
-See the [installation guide](RELEASE-1.0.5.md).
+See the [installation guide](RELEASE-1.0.6.md).
 The GUI uses the original JINGWEI bird for the
 application, window and Windows taskbar.
 
@@ -87,9 +87,9 @@ isolated from this reference workflow. See [verification](SE_TESTS.md).
 ## Linux and macOS
 
 For Linux V1.0.5, download all parts, its checksums and `install-linux.sh` from
-the [release page](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.5).
+the [release page](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.6).
 Run `sh install-linux.sh`; the command is placed in `~/.local/bin`.
-Custom installation locations are described in the [installation guide](RELEASE-1.0.5.md).
+Custom installation locations are described in the [installation guide](RELEASE-1.0.6.md).
 No macOS binary is included in this release. From the installed application folder:
 
 ```bash
@@ -98,7 +98,7 @@ No macOS binary is included in this release. From the installed application fold
 ./jingwei inspect --input data.csv
 ./jingwei benchmark --input data.csv \
   --methods jingwei-dmf jingwei-dcae mean knn bpca missforest \
-  --mechanism mnar-jingwei --mask-rate 0.2 \
+  --mechanism mnar-jingwei-v2 --mask-rate 0.2 \
   --repeats 1 --device cpu --output results/my-benchmark
 ```
 
@@ -210,7 +210,23 @@ imputation method. `failure_kind=unsupported_input` distinguishes these cases.
 - In the current profile, one shared evaluation mask E is generated. Any additional
   training corruption belongs to the method. Evaluation truths never reach workers.
   Repeated runs record the seed, masks, parameters and dependency versions.
-- Mechanisms: MCAR, custom logistic/threshold/quantile MNAR, and the original JINGWEI threshold kernel.
+- **MNAR · JINGWEI** (`mnar-jingwei-v2`) uses within-protein z-scores on the
+  working scale and `p = sigmoid(-z + b)`, with the intercept calibrated to the
+  selected expected rate. Lower intensities have higher missingness probability.
+  The realized rate and probability range are saved. MCAR, custom
+  logistic/threshold/quantile MNAR and a historical compatibility kernel remain.
+- All five neural models default to model-owned validation stopping: 10% of
+  available input observations for validation, minimum 30 epochs, patience 30,
+  relative improvement tolerance 1e-4. Validation is excluded from fitting
+  normalization and training targets. Best weights are restored. JINGWEI monitors
+  validation MSE; PIMMS monitors its native validation objective and retains its
+  LR finder with plateau LR reduction. The shared test input is unchanged.
+- The 5,000-epoch and 30-minute limits are safety caps. Results distinguish a
+  validation plateau from an epoch cap, fixed diagnostic budget, non-iterative
+  algorithms and traditional algorithms without convergence diagnostics.
+  `--training-policy fixed --max-epochs N` is for diagnostics. CF's entry batch
+  size defaults to its native 4096 (`--cf-batch-size`); row models default to
+  64 samples (`--batch-size`). Per-method settings can override these values.
 - MSE/MAE/RMSE/NRMSE and correlations use evaluation entries only. Undefined
   correlations remain empty. W2 compares multivariate **sample distributions**
   on a common protein subset, never a flattened intensity distribution. W2

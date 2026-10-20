@@ -86,7 +86,7 @@ def main():
                     "jingwei-dcae": {"encoder_blocks": 1, "decoder_blocks": 1,
                         "mask_predictor_hidden_dim": 8}}
                 window.feature_selection = window.preview_data["feature_ids"][:10]
-                for key, value in {"max_epochs": 2, "latent_dim": 4, "hidden_dims": "8", "batch_size": 4, "threads": 1}.items():
+                for key, value in {"training_policy":"fixed", "max_epochs": 2, "latent_dim": 4, "hidden_dims": "8", "batch_size": 4, "threads": 1}.items():
                     set_value(window.fields[key], value)
             window.select_methods(["mean", "knn", "jingwei-dcae"])
             assert "repeats" not in window.fields

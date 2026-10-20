@@ -25,6 +25,7 @@ def test_original_parameters_and_method_override_share_identical_holdouts(tmp_pa
     assert main(common + ['--output', str(tmp_path / 'preset'), '--jingwei-preset', 'original-benchmark',
                          '--method-config', str(config)]) == 0
     assert captured[2]['learning_rate'] == 5e-4 and captured[2]['batch_size'] == 1024
+    assert captured[2]['training_policy'] == 'convergence' and captured[2]['max_epochs'] == 5000
     assert captured[3]['latent_dim'] == 256 and captured[3]['mask_predictor_hidden_dim'] == 128
     assert captured[3]['encoder_blocks'] == captured[3]['decoder_blocks'] == captured[3]['dilation'] == 3
     assert captured[3]['learning_rate'] == 5e-5 and captured[3]['max_epochs'] == 7

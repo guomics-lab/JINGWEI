@@ -391,7 +391,7 @@ def run_method(
             from .lightning_engine import run_jingwei_lightning as run_jingwei
         else:
             raise ValueError(f"unknown training engine: {engine}")
-        prediction, metadata = run_jingwei(name, matrix, training_hidden, params, device=device, seed=seed)
+        prediction, metadata = run_jingwei(name, matrix, training_hidden, params, device=device, seed=seed, folder=folder)
     elif spec.backend == "pimms":
         from .pimms_engine import run_pimms
 
@@ -460,6 +460,12 @@ def run_method(
         metadata["baseline_engine"] = baseline_engine
     if name == "mice-pmm":
         metadata["mice_backend"] = mice_backend
+    if not spec.gpu:
+        # Completing an algorithm is not evidence that an iterative or
+        # stochastic estimator has converged. Preserve that distinction.
+        direct = name in ("zero", "minimum", "feature-minimum", "mean", "median", "sample-median", "knn", "perseus")
+        metadata.setdefault("convergence_status", "not_applicable" if direct else "not_assessed")
+        metadata.setdefault("converged", None)
     prediction = np.asarray(prediction, dtype=float)
     if prediction.shape != matrix.shape or not np.isfinite(prediction).all():
         raise ValueError(

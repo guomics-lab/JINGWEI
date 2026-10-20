@@ -7,7 +7,7 @@ import pytest
 from jingwei_benchmark.cli import main, parser
 
 
-@pytest.mark.parametrize('mechanism', ['mcar', 'mnar-logistic', 'mnar-jingwei-original'])
+@pytest.mark.parametrize('mechanism', ['mcar', 'mnar-logistic', 'mnar-jingwei-original', 'mnar-jingwei-v2'])
 def test_impute_dispatch_applies_training_corruption_only_to_jingwei(tmp_path, monkeypatch, mechanism):
     import jingwei_benchmark.benchmark as orchestration
     source = tmp_path / 'input.csv'
@@ -56,6 +56,7 @@ def test_impute_trains_both_native_models_with_targets_and_preserves_observation
     assert main(['impute','--input',str(source),'--methods','jingwei-dmf','jingwei-dcae',
                  '--scale','log2','--transform','none','--mechanism','mcar','--mask-rate','.3',
                  '--training-engine',engine,'--device','cpu','--threads','1','--max-epochs','2',
+                 '--training-policy','fixed',
                  '--batch-size','3','--latent-dim','4','--hidden-dims','8','--output',str(output)]) == 0
     with np.load(output/'repeat_000/masks.npz') as masks:
         observed = masks['observed']; hidden = masks['training_hidden']

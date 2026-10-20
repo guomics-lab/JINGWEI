@@ -12,6 +12,25 @@ from jingwei_benchmark._native.models import DMF
 from jingwei_benchmark.torch_engine import factorize_dmf, masked_loss
 
 
+def test_mask_classifier_learns_both_observed_and_missing_labels_without_test_values():
+    """The mask is known everywhere; intensity targets are only known on S.
+
+    This independently checks the original full-matrix BCE objective, rather
+    than comparing two adapters that could share the same scope regression.
+    """
+    output = torch.zeros(1, 4, requires_grad=True)
+    logits = torch.zeros(1, 4, requires_grad=True)
+    target = torch.tensor([[2., 3., 0., 0.]])
+    input_mask = torch.tensor([[1., 1., 0., 0.]])
+    loss = masked_loss(output, logits, target, input_mask, input_mask, .5)
+    loss.backward()
+    assert torch.all(logits.grad[0, :2] < 0)
+    assert torch.all(logits.grad[0, 2:] > 0)
+    assert torch.count_nonzero(output.grad[0, 2:]) == 0
+    expected = (2.**2 + 3.**2)/2 + .5 * math.log(2)
+    assert loss.item() == pytest.approx(expected)
+
+
 @pytest.mark.parametrize("hidden", [[], [7], [7, 5]])
 def test_factorized_dmf_preserves_native_outputs_gradients_and_parameters(hidden):
     torch.manual_seed(21)

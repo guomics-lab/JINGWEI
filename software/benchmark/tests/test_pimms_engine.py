@@ -16,7 +16,7 @@ def test_second_mask_empty_features_report_native_input_limit(name, tmp_path):
     matrix=np.array([[2., 3.], [4., 5.]])
     hidden=np.array([[False, True], [False, True]])
     before=matrix.copy(),hidden.copy()
-    with pytest.raises(MethodInputError,match="1 features are empty after the second mask") as error:
+    with pytest.raises(MethodInputError,match="1 features have no model-training observation") as error:
         run_pimms(name,matrix,hidden,{},device="cpu",seed=0,folder=tmp_path)
     assert error.value.failure_kind=="unsupported_input"
     np.testing.assert_array_equal(matrix,before[0])

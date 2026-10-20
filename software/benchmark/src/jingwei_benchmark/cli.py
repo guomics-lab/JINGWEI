@@ -11,6 +11,8 @@ from .protocol import MECHANISMS
 from .notebook_protocol import PROTOCOLS
 from .platforms import add_device_arguments
 from .runtime import default_input_path
+from .convergence import (DEFAULT_MAX_EPOCHS, DEFAULT_PATIENCE, DEFAULT_MIN_EPOCHS,
+                          DEFAULT_MIN_DELTA, DEFAULT_VALIDATION_FRACTION)
 
 DEFAULT_TIMEOUT_SECONDS = 30 * 60
 
@@ -82,7 +84,7 @@ def parser():
         )
         add_device_arguments(p)
         p.add_argument("--mechanism", choices=MECHANISMS, default="mcar",
-                       help="mnar-jingwei-original replays historical CSVDataset.get_mask on working-scale data; mnar-jingwei retains the older custom quantile rule")
+                       help="mnar-jingwei-v2: within-protein abundance-dependent MNAR with a calibrated mask rate; mnar-jingwei-original: historical get_mask compatibility; mnar-jingwei: older quantile rule")
         p.add_argument("--mask-rate", type=float, default=0.2,
                        help="test mask rate for benchmark; JINGWEI training corruption rate for impute (default: 0.2)")
         p.add_argument(
@@ -109,12 +111,22 @@ def parser():
                        help="MICE-PMM implementation: Python linear ridge/PMM (default), or original R mice")
         p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS,
                        help="maximum seconds per method/repeat (default: 1800; 30 min)")
-        p.add_argument("--max-epochs", type=int, default=50)
+        p.add_argument("--training-policy", choices=("convergence", "fixed"), default="convergence",
+                       help="convergence: model-owned validation plateau and best checkpoint; fixed: diagnostic epoch budget")
+        p.add_argument("--max-epochs", type=int, default=DEFAULT_MAX_EPOCHS,
+                       help="neural safety cap; reaching it does not confirm convergence")
+        p.add_argument("--patience", type=int, default=DEFAULT_PATIENCE)
+        p.add_argument("--min-epochs", type=int, default=DEFAULT_MIN_EPOCHS)
+        p.add_argument("--min-delta", type=float, default=DEFAULT_MIN_DELTA,
+                       help="relative validation improvement required to reset patience")
+        p.add_argument("--validation-fraction", type=float, default=DEFAULT_VALIDATION_FRACTION,
+                       help="model-owned validation fraction of available input observations; never uses benchmark test truths")
         p.add_argument("--jingwei-preset", choices=("standard", "original-benchmark"), default="standard",
                        help="original-benchmark restores original JINGWEI training settings; --method-config takes precedence")
         p.add_argument("--training-engine", choices=("torch", "lightning"), default="torch",
                        help="JINGWEI native PyTorch execution, or original Lightning runner for comparison")
-        p.add_argument("--batch-size", type=int, default=64)
+        p.add_argument("--batch-size", type=int, default=64, help="sample batch size for row-based neural models")
+        p.add_argument("--cf-batch-size", type=int, default=4096, help="PIMMS CF entry batch size (native default: 4096)")
         p.add_argument("--latent-dim", type=int, default=64)
         p.add_argument("--hidden-dims", nargs="+", type=int, default=[256, 128])
         p.add_argument("--learning-rate", type=float, default=0.001)
@@ -205,7 +217,9 @@ def main(argv=None):
             "repeats",
             "threads",
             "max_epochs",
+            "patience", "min_epochs",
             "batch_size",
+            "cf_batch_size",
             "latent_dim",
             "timeout",
         ):
@@ -213,6 +227,10 @@ def main(argv=None):
                 raise ValueError(f"--{name.replace('_','-')} must be positive")
         if args.seed < 0 or any(d <= 0 for d in args.hidden_dims):
             raise ValueError("seed must be nonnegative and hidden dimensions positive")
+        if not math.isfinite(args.validation_fraction) or not 0 < args.validation_fraction < 1:
+            raise ValueError("--validation-fraction must be between 0 and 1")
+        if not math.isfinite(args.min_delta) or not 0 <= args.min_delta < 1:
+            raise ValueError("--min-delta must be finite and in [0,1)")
         from .benchmark import run_experiment
 
         return run_experiment(args)

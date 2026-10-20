@@ -1,11 +1,13 @@
-"""Official PIMMS fitting with cached, numerically identical loader inputs.
+"""PIMMS models with cached loaders and an explicit training stopping policy.
 
-The fastai learner, batching/shuffling, LR finder and all model callbacks stay
-upstream. Patches are local to an isolated worker and restored even on errors.
+Fixed-budget execution retains native one-cycle fitting. Convergence execution
+retains the native model, loss and LR finder, then uses validation-plateau
+fitting. Patches are local to the isolated worker and always restored.
 """
 
 from contextlib import contextmanager
 from importlib.metadata import version
+from pathlib import Path
 import random
 import time
 
@@ -107,18 +109,68 @@ def cached_loaders(enabled, *, points, method):
             datasets.DatasetWithTarget, datasets.DatasetWithTargetSpecifyTarget = original
 
 
+@contextmanager
+def convergent_fitting(monitor):
+    """Keep native PIMMS models/loss/LR finder, then fit to a validation plateau.
+
+    A fixed-epoch one-cycle schedule ties its warmup to the arbitrary epoch cap.
+    In convergence mode use its LR-finder suggestion with plateau LR reduction,
+    best-state restoration and an explicit safety cap instead.
+    """
+    if not monitor.enabled:
+        yield
+        return
+    from fastai.learner import Learner
+    import fastai.callback.schedule  # installs Learner.fit_one_cycle
+    from fastai.callback.core import Callback, CancelFitException
+    from fastai.callback.tracker import EarlyStoppingCallback
+
+    class ConvergenceCallback(Callback):
+        order = 65
+
+        def after_epoch(self):
+            index = list(self.learn.recorder.metric_names[1:]).index('valid_loss')
+            loss = float(self.learn.recorder.values[-1][index])
+            stop = monitor.observe(self.epoch + 1, loss, self.learn.model)
+            if monitor.wait and monitor.wait % max(1, monitor.patience // 3) == 0:
+                for hyper in self.learn.opt.hypers:
+                    hyper['lr'] = max(hyper['lr'] * .5, 1e-7)
+            print(f"Validation | epoch={self.epoch+1} | native loss={loss:.6g} | best={monitor.best:.6g} | wait={monitor.wait}/{monitor.patience}", flush=True)
+            if stop:
+                raise CancelFitException()
+
+        def after_fit(self):
+            monitor.restore(self.learn.model)
+
+    original = Learner.fit_one_cycle
+    def fit_to_plateau(learn, n_epoch, lr_max=None, **kwargs):
+        learn.remove_cb(EarlyStoppingCallback)
+        return learn.fit(n_epoch, lr=lr_max, cbs=[ConvergenceCallback()])
+    Learner.fit_one_cycle = fit_to_plateau
+    try:
+        yield
+    finally:
+        Learner.fit_one_cycle = original
+
+
 def run_pimms(name, matrix, training_hidden, params, *, device, seed, folder):
+    folder = Path(folder)
+    from .convergence import validation_split, ValidationMonitor
+    selection = validation_split(matrix, training_hidden, params, seed, folder)
+    monitor = ValidationMonitor(params, enabled=selection.any(), validation_mask=selection,
+                                metric='native PIMMS validation loss')
+    corruption = training_hidden | selection
     if name in ("pimms-dae", "pimms-vae"):
         # The upstream scaler/imputer cannot fit a feature whose entire
         # training column is missing. Do not silently change the shared mask,
         # borrow validation/test values or let sklearn drop model dimensions.
-        empty = ~(np.isfinite(matrix) & ~training_hidden).any(axis=0)
+        empty = ~(np.isfinite(matrix) & ~corruption).any(axis=0)
         if empty.any():
             from .methods import MethodInputError
             raise MethodInputError(
                 f"{name} requires an observed training value in every feature; "
-                f"{int(empty.sum())} features are empty after the second mask. "
-                "The original notebook used a single mask. Both requested masks are preserved."
+                f"{int(empty.sum())} features have no model-training observation. "
+                "The common input is preserved."
             )
     import torch
     from fastai.torch_core import defaults
@@ -132,10 +184,11 @@ def run_pimms(name, matrix, training_hidden, params, *, device, seed, folder):
     frame = pd.DataFrame(matrix, index=[f"S{i}" for i in range(len(matrix))],
                          columns=[f"F{i}" for i in range(matrix.shape[1])])
     frame.index.name, frame.columns.name = "sample", "feature"
-    train, validation = frame.mask(training_hidden), frame.where(training_hidden)
+    validation_mask = selection if monitor.enabled else training_hidden
+    train, validation = frame.mask(corruption), frame.where(validation_mask)
     options = dict(epochs_max=params.get("max_epochs", 50), cuda=device == "cuda")
     engine = params.get("baseline_engine", "optimized")
-    with cached_loaders(engine == "optimized", points=matrix.size, method=name) as acceleration, epoch_logging(engine == "optimized"):
+    with cached_loaders(engine == "optimized", points=matrix.size, method=name) as acceleration, epoch_logging(engine == "optimized"), convergent_fitting(monitor):
         if name == "pimms-cf":
             from pimmslearn.sklearn.cf_transformer import CollaborativeFilteringTransformer
 
@@ -143,14 +196,27 @@ def run_pimms(name, matrix, training_hidden, params, *, device, seed, folder):
             validation_series = validation.stack().rename("intensity")
             model = CollaborativeFilteringTransformer(
                 target_column="intensity", sample_column="sample", item_column="feature",
-                n_factors=params.get("latent_dim", 30), batch_size=params.get("batch_size", 64),
+                n_factors=params.get("latent_dim", 30), batch_size=min(params.get("batch_size", 4096), len(training_series)),
                 out_folder=str(folder))
             started = time.perf_counter()
             model.fit(training_series, y=validation_series if len(validation_series) else None, **options)
             fitted = time.perf_counter()
             learner = model.learn
             training_steps = len(learner.recorder.losses)
-            prediction = model.transform(frame.stack().rename("intensity")).unstack().reindex(index=frame.index, columns=frame.columns).to_numpy()
+            # Native get_preds squeezes a single missing prediction to a scalar
+            # in this fastai version. Keep native categorical encoding and
+            # forward computation, preserving a vector for every batch size.
+            missing = frame.isna().stack()
+            indices = missing.loc[missing].index
+            prediction = matrix.copy()
+            if len(indices):
+                test_loader = model.dls.test_dl(indices.to_frame(), shuffle=False, drop_last=False)
+                learner.model.eval()
+                parts = []
+                with torch.no_grad():
+                    for batch in test_loader:
+                        parts.append(learner.model(batch[0]).reshape(-1).detach().cpu().numpy())
+                prediction[~np.isfinite(matrix)] = np.concatenate(parts)
         else:
             from pimmslearn.sklearn.ae_transformer import AETransformer
 
@@ -158,7 +224,7 @@ def run_pimms(name, matrix, training_hidden, params, *, device, seed, folder):
                 hidden_layers=params.get("hidden_dims", [512]), latent_dim=params.get("latent_dim", 50),
                 batch_size=params.get("batch_size", 64), out_folder=str(folder))
             started = time.perf_counter()
-            model.fit(train, y=validation if training_hidden.any() else None, **options)
+            model.fit(train, y=validation if validation_mask.any() else None, **options)
             fitted = time.perf_counter()
             learner = model.analysis.learn
             training_steps = len(learner.recorder.losses)
@@ -178,9 +244,15 @@ def run_pimms(name, matrix, training_hidden, params, *, device, seed, folder):
         "prediction_s": finished-fitted, "epochs_trained": model.epochs_trained_,
         "training_steps": training_steps,
         "training_observations": int(train.notna().to_numpy().sum()),
-        "validation_observations": int(training_hidden.sum()),
+        **monitor.metadata(),
+        "validation_observations": int(validation_mask.sum()),
+        "learning_rate_schedule": "validation-plateau" if monitor.enabled else "native one-cycle",
         "batch_size": params.get("batch_size", 64),
+        "effective_batch_size": int(learner.dls.train.bs),
     }
+    if monitor.restored:
+        torch.save({'state_dict':learner.model.state_dict(), 'best_epoch':monitor.best_epoch},
+                   folder / 'best_model.pt')
     # Native plots remain available; close them after fitting to release memory.
     from matplotlib import pyplot as plt
     plt.close("all")

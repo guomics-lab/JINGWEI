@@ -21,7 +21,7 @@ from .methods import canonical_name
 from .platforms import validate_device
 from .runtime import python_command, user_workspace
 from .atomic import write_json
-from .protocol import ORIGINAL_MECHANISM, uses_mask_rate
+from .protocol import ORIGINAL_MECHANISM, JINGWEI_MECHANISM, uses_mask_rate
 
 TERMINAL = {"completed", "incomplete", "failed", "cancelled", "interrupted"}
 
@@ -102,14 +102,18 @@ def make_argv(config, input_path, output_path, cancel_file=None, parameter_file=
         raise ValueError("评测掩蔽率应在 0 和 1 之间")
     if mode == "impute" and uses_mask_rate(args.mechanism, args.paper_probabilities) and not 0 <= args.mask_rate < 1:
         raise ValueError("训练掩蔽率应在 0（含）和 1 之间")
-    custom = set() if notebook else {args.mechanism} - {"mcar", ORIGINAL_MECHANISM}
+    custom = set() if notebook else {args.mechanism} - {"mcar", ORIGINAL_MECHANISM, JINGWEI_MECHANISM}
     if custom and not 0 <= args.low_quantile < args.high_quantile <= 1:
         raise ValueError("分位数应满足 0 ≤ 低分位 < 高分位 ≤ 1")
     if custom and (args.low_probability < args.high_probability or args.logistic_slope > 0):
         raise ValueError("MNAR 缺失概率必须随丰度降低而增加")
-    for key in ("max_epochs", "batch_size", "latent_dim", "threads", "timeout", "repeats"):
+    if args.mechanism == JINGWEI_MECHANISM and not args.logistic_slope < 0:
+        raise ValueError("JINGWEI MNAR slope must be negative")
+    for key in ("max_epochs", "batch_size", "latent_dim", "threads", "timeout", "repeats", "patience", "min_epochs"):
         if getattr(args, key) <= 0:
             raise ValueError(f"{key} 必须大于 0")
+    if not 0 < args.validation_fraction < 1 or not 0 <= args.min_delta < 1:
+        raise ValueError("验证比例或改善阈值无效")
     if args.seed < 0 or any(x <= 0 for x in args.hidden_dims):
         raise ValueError("种子必须非负，隐藏层维度必须为正数")
     return argv

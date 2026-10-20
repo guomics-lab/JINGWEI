@@ -14,7 +14,7 @@ from .gui_jobs import read_json, write_json
 from .gui_parameters import NEURAL, PARAMETERS, LABELS
 from .methods import METHODS
 from .platforms import cuda_supported
-from .protocol import ORIGINAL_MECHANISM, uses_mask_rate
+from .protocol import ORIGINAL_MECHANISM, JINGWEI_MECHANISM, uses_mask_rate
 
 
 STYLE = """
@@ -230,14 +230,14 @@ class WorkbenchLayout:
         form = QFormLayout()
         self.run_settings_form = form
         self.field(form, "command", "任务", self.options([("评测", "benchmark"), ("插补", "impute")]))
-        mechanisms = [("MCAR", "mcar"), ("MNAR · JINGWEI（原仓库）", ORIGINAL_MECHANISM), ("MNAR · Logistic", "mnar-logistic"), ("MNAR · Threshold", "mnar-threshold"), ("MNAR · 分位数（自定义）", "mnar-jingwei")]
+        mechanisms = [("MCAR", "mcar"), ("MNAR · JINGWEI", JINGWEI_MECHANISM), ("MNAR · Logistic", "mnar-logistic"), ("MNAR · Threshold", "mnar-threshold"), ("MNAR · 分位数（自定义）", "mnar-jingwei"), ("历史规则（兼容旧任务）", ORIGINAL_MECHANISM)]
         self.field(form, "mechanism", "缺失机制", self.options(mechanisms))
-        self.bind(self.fields["mechanism"], "原仓库规则保留 get_mask() 的历史尺度比较、严格区间和固定概率；不做比例校准或边际修复。", "setToolTip")
+        self.bind(self.fields["mechanism"], "JINGWEI：按每个蛋白的丰度构造缺失概率，低丰度值更易缺失，并校准到所选比例。", "setToolTip")
         self.mask_rate_stack = QStackedWidget()
         self.fields["mask_rate"] = FractionControl(0.2, 0.0001, 0.9999)
         self.mask_rate_stack.addWidget(self.fields["mask_rate"])
-        self.automatic_mask_rate = self.label("自动")
-        self.bind(self.automatic_mask_rate, "此机制使用固定概率，掩蔽比例由数据决定。", "setToolTip")
+        self.automatic_mask_rate = self.label("固定概率")
+        self.bind(self.automatic_mask_rate, "使用 get_mask() 的固定概率 0.9 / 0.5 / 0.3，不使用自定义掩蔽比例；实际比例写入运行日志。", "setToolTip")
         self.mask_rate_stack.addWidget(self.automatic_mask_rate)
         self.field_labels["mask_rate"] = self.label("掩蔽比例")
         form.addRow(self.field_labels["mask_rate"], self.mask_rate_stack)
@@ -399,6 +399,7 @@ class WorkbenchLayout:
         self.field(form, "device", "计算设备", self.options(devices))
         self.field(form, "jingwei_preset", "JINGWEI 参数预设", self.options([("通用设置", "standard"), ("原始 benchmark 参数", "original-benchmark")]))
         self.field(form, "training_engine", "JINGWEI 训练引擎", self.options([("PyTorch（较快）", "torch"), ("Lightning（兼容）", "lightning")]))
+        self.field(form, "training_policy", "训练终止方式", self.options([("验证集收敛", "convergence"), ("固定轮数（诊断）", "fixed")]))
         for key, spec in NEURAL.items():
             self.field(form, key, spec[0], control(spec))
         if cuda_supported():
@@ -508,14 +509,17 @@ class WorkbenchLayout:
         controlled = uses_mask_rate(evaluation, uncalibrated)
         self.fields["mask_rate"].setEnabled(controlled)
         self.mask_rate_stack.setCurrentIndex(0 if controlled else 1)
+        self.automatic_mask_rate.setToolTip(self.t(
+            "使用 get_mask() 的固定概率 0.9 / 0.5 / 0.3，不使用自定义掩蔽比例；实际比例写入运行日志。"
+            if evaluation == ORIGINAL_MECHANISM else "使用该机制的未校准概率；实际掩蔽比例写入运行日志。"))
         self.field_labels["mechanism"].setText(self.t("缺失机制" if benchmark else "训练缺失机制"))
         self.field_labels["mask_rate"].setText(self.t("掩蔽比例" if benchmark else "训练掩蔽比例"))
         self.mask_rate_stack.setToolTip(self.t("评测时构造所有方法共用的测试掩蔽；插补时仅为 JINGWEI 构造训练掩蔽，保留原始观测值作为监督目标。"))
-        custom = {evaluation} - {"mcar", ORIGINAL_MECHANISM}
+        custom = {evaluation} - {"mcar", ORIGINAL_MECHANISM, JINGWEI_MECHANISM}
         for key in ("mask_level", "paper_probabilities", "allow_empty_marginals"):
             self.fields[key].setEnabled(bool(custom or (key == "allow_empty_marginals" and evaluation == "mcar")))
         for key, mechanisms in {
-            "logistic_slope": {"mnar-logistic"}, "low_quantile": {"mnar-jingwei", "mnar-threshold"},
+            "logistic_slope": {"mnar-logistic", JINGWEI_MECHANISM}, "low_quantile": {"mnar-jingwei", "mnar-threshold"},
             "high_quantile": {"mnar-jingwei"}, "low_probability": {"mnar-jingwei", "mnar-threshold"},
             "high_probability": {"mnar-jingwei"}, "threshold_probability": {"mnar-threshold"},
         }.items():

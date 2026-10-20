@@ -64,7 +64,7 @@ def main():
     fixture = Path(ui["job_folder"]) / "input.csv"
     methods = ["all"] if args.all_methods else ["mean", "bpca", "jingwei-dmf", "jingwei-dcae", "pimms-vae"]
     common = ["benchmark", "--input", fixture, "--repeats", "1", "--mask-rate", ".05", "--threads", "1",
-              "--max-epochs", "1", "--batch-size", "4", "--latent-dim", "4", "--hidden-dims", "8", "--timeout", "180"]
+              "--training-policy", "fixed", "--max-epochs", "1", "--batch-size", "4", "--latent-dim", "4", "--hidden-dims", "8", "--timeout", "180"]
     run("cli", *common, "--methods", *methods, "--device", "cpu", "--output", output / "cpu")
     import pandas as pd
     cpu = pd.read_csv(output / "cpu/metrics.csv")
@@ -94,7 +94,7 @@ def main():
     impute_output = output / "impute-training-mask"
     run("cli", "impute", "--input", fixture, "--methods", "mean", "jingwei-dmf", "jingwei-dcae",
         "--mechanism", "mcar", "--mask-rate", ".25", "--device", "cpu", "--threads", "1",
-        "--max-epochs", "2", "--batch-size", "4", "--latent-dim", "4", "--hidden-dims", "8",
+        "--training-policy", "fixed", "--max-epochs", "2", "--batch-size", "4", "--latent-dim", "4", "--hidden-dims", "8",
         "--output", impute_output)
     import numpy as np
     imputed = json.loads((impute_output / "metrics.json").read_text(encoding="utf-8"))
@@ -119,7 +119,7 @@ def main():
     original_output = output / "alzheimer-original-mnar"
     run("cli", "benchmark", "--methods", "mean", "knn", "jingwei-dmf", "jingwei-dcae", "pimms-dae", "pimms-vae", "pimms-cf",
         "--mechanism", "mnar-jingwei-original", "--seed", "0", "--device", "cpu",
-        "--max-epochs", "2", "--latent-dim", "8", "--hidden-dims", "32",
+        "--training-policy", "fixed", "--max-epochs", "2", "--latent-dim", "8", "--hidden-dims", "32",
         "--batch-size", "32", "--threads", "2", "--output", original_output)
     import numpy as np
     original = pd.read_csv(original_output / "metrics.csv")

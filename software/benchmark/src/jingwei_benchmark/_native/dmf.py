@@ -108,14 +108,14 @@ class DMFImputer(pl.LightningModule):
         else:
             recon_loss = x_tilde.sum() * 0.0
 
-        if self.mask_weight > 0 and observed_points.any():
+        if self.mask_weight > 0:
             mask_loss = F.binary_cross_entropy_with_logits(
-                predicted_mask_logits[observed_points], mask_batch[observed_points]
+                predicted_mask_logits, mask_batch
             )
             mask_acc = (
                 (
-                    (torch.sigmoid(predicted_mask_logits[observed_points]) > 0.5)
-                    == mask_batch[observed_points]
+                    (torch.sigmoid(predicted_mask_logits) > 0.5)
+                    == mask_batch
                 )
                 .float()
                 .mean()
