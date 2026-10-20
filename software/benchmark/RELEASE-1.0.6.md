@@ -63,3 +63,7 @@ Run `jingwei-Windows-Setup.exe`. One wizard handles the plain-text license,
 editable destination with Browse, download, installation and completion. The
 offline installer also always offers destination selection, including upgrades.
 Python, PyTorch, R and method dependencies are bundled.
+
+Windows 的内置 R 使用 UTF-8 语言环境，支持包含中文和空格的自定义安装路径。
+Bundled Windows R uses a UTF-8 locale so custom installation paths can contain
+Chinese characters and spaces.

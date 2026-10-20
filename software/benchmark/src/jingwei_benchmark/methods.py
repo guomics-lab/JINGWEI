@@ -134,7 +134,9 @@ def find_method_source(name):
 def r_environment(library=None):
     env = os.environ.copy()
     if os.name == "nt":
-        env["LC_ALL"] = "C"
+        # UCRT R needs a UTF-8 Windows locale to resolve a bundled R_HOME and
+        # package library beneath a Unicode installation directory.
+        env["LC_ALL"] = "English_United States.utf8"
         if getattr(sys, "frozen", False) and (resource_root() / ".r-runtime/bin/Rscript.exe").is_file():
             env["R_HOME"] = str(resource_root() / ".r-runtime")
     root = resource_root() / ".r-library"

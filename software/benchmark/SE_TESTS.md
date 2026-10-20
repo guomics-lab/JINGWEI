@@ -1,5 +1,24 @@
 # Software verification
 
+## 1.0.6 release checks — 2026-10-20
+
+The final Windows test union covers all 307 collected cases: 305 passed, two
+platform-specific cases skipped, no missing cases or remaining failures. This
+includes five real installer-fixture checks and a bundled-R regression using
+an isolated installation path containing Chinese characters and spaces. The
+Windows R subprocess locale is UTF-8; BPCA and R package discovery pass from
+that path. WSL focused runs passed 73 cases plus an overlapping 13-case delta.
+
+The frozen Windows runtime passed 35 CPU and five CUDA method dispatches on
+execution fixtures, plus hidden native GUI cold/warm workflows. A separate full
+Alzheimer run below assesses validation stopping and accuracy; the short
+execution fixtures do not establish convergence. Source and frozen predictions
+agree within 1.4e-8 MSE. macOS runtime has not been tested.
+
+Evidence: `results/mnar-result-audit-20261020/windows-test-coverage.json`,
+`windows-r-fix.xml`, `AD-frozen-convergence-verification.json`, and
+`results/mnar-v2-20261020/frozen-validated/validation.json`.
+
 ## MNAR v2 and validation stopping — 2026-10-20
 
 This experiment belongs to software 1.0.6 and supersedes no historical task
@@ -39,7 +58,7 @@ Evidence: `results/mnar-result-audit-20261020/AD-convergence-verification.json`,
 selection was not performed. Earlier sections below retain their original
 version/protocol scope; their numerical rows do not describe MNAR v2.
 
-## Current Alzheimer GUI reference — 2026-10-20
+## Historical 1.0.5 Alzheimer GUI reference — 2026-10-20
 
 The current frozen Windows 1.0.5 GUI job runner completed all ten selected
 methods on the full Alzheimer CSV, using the saved GUI configuration and full
