@@ -1,4 +1,4 @@
-"""Model-owned validation and an auditable validation-plateau stopping rule.
+"""One fixed model-owned split with optional validation-plateau stopping.
 
 Only the common, already test-corrupted input enters this module. It never has
 access to the benchmark's held-out intensity values or its scoring arrays.
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-DEFAULT_MAX_EPOCHS = 5000
+DEFAULT_MAX_EPOCHS = 500
 DEFAULT_PATIENCE = 30
 DEFAULT_MIN_EPOCHS = 30
 DEFAULT_MIN_DELTA = 1e-4
@@ -18,9 +18,9 @@ DEFAULT_VALIDATION_FRACTION = .1
 def validation_split(matrix, training_hidden, params, seed, folder=None):
     observed = np.isfinite(matrix)
     hidden = np.zeros_like(observed)
-    if params.get('training_policy', 'fixed') not in ('fixed','convergence'):
+    if params.get('training_policy', 'fixed') not in ('fixed','fixed-validation','convergence'):
         raise ValueError('unknown neural training policy')
-    if params.get('training_policy', 'fixed') == 'convergence':
+    if params.get('training_policy', 'fixed') in ('fixed-validation','convergence'):
         from .masking import sample_hidden_mask
         from .protocol import _retain_marginals
         fraction = params.get('validation_fraction', DEFAULT_VALIDATION_FRACTION)
@@ -34,7 +34,8 @@ def validation_split(matrix, training_hidden, params, seed, folder=None):
             from .methods import MethodInputError
             raise MethodInputError('insufficient available observations for model-owned validation; convergence cannot be assessed')
         if folder is not None:
-            np.savez_compressed(Path(folder) / 'model_validation.npz', hidden=hidden)
+            np.savez_compressed(Path(folder) / 'model_validation.npz', hidden=hidden,
+                                training=eligible & ~hidden)
     return hidden
 
 
@@ -42,6 +43,8 @@ class ValidationMonitor:
     def __init__(self, params, *, enabled, validation_mask, metric='validation MSE'):
         self.enabled = bool(enabled)
         self.policy = params.get('training_policy', 'fixed')
+        self.early_stopping = self.policy == 'convergence'
+        self.requested_epochs = params.get('max_epochs', DEFAULT_MAX_EPOCHS)
         self.patience = params.get('patience', DEFAULT_PATIENCE)
         self.min_epochs = params.get('min_epochs', DEFAULT_MIN_EPOCHS)
         self.min_delta = params.get('min_delta', DEFAULT_MIN_DELTA)
@@ -72,7 +75,7 @@ class ValidationMonitor:
             self.significant_best, self.wait = float(loss), 0
         else:
             self.wait += 1
-        self.stopped = epoch >= self.min_epochs and self.wait >= self.patience
+        self.stopped = self.early_stopping and epoch >= self.min_epochs and self.wait >= self.patience
         return self.stopped
 
     def restore(self, model):
@@ -81,9 +84,14 @@ class ValidationMonitor:
             self.restored = True
 
     def metadata(self):
-        status = ('validation_plateau' if self.stopped else 'max_epochs') if self.enabled else (
+        status = ('validation_plateau' if self.stopped else 'max_epochs') if self.enabled and self.early_stopping else (
+            'fixed_budget' if self.policy == 'fixed-validation' else (
             'insufficient_validation' if self.policy == 'convergence' else 'fixed_budget')
-        return {'training_policy':self.policy, 'converged':self.stopped,
+        )
+        return {'training_policy':self.policy, 'converged':self.stopped if self.early_stopping else None,
+                'early_stopping_enabled':self.early_stopping,
+                'requested_epochs':self.requested_epochs,
+                'checkpoint_selection':'best_validation' if self.enabled else 'last_epoch',
                 'convergence_status':status, 'best_epoch':self.best_epoch,
                 'best_validation_loss':self.best if np.isfinite(self.best) else None,
                 'validation_metric':self.metric if self.enabled else None,

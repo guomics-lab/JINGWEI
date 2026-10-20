@@ -1,10 +1,12 @@
 """Small, explicit desktop message catalog; method IDs and saved data stay stable."""
 
 MESSAGES = {
+    '交互秩':'Interaction rank',
     "验证比例或改善阈值无效": "Invalid validation fraction or improvement tolerance",
     "条目批次大小": "Entry batch size",
     "训练终止方式": "Training stopping rule", "验证集收敛": "Validation plateau",
-    "固定轮数（诊断）": "Fixed budget (diagnostic)", "最大训练轮数": "Maximum epochs",
+    "固定轮数": "Fixed epochs",
+    "最大训练轮数": "Maximum epochs",
     "早停等待轮数": "Early stopping patience", "最少训练轮数": "Minimum epochs",
     "验证相对改善阈值": "Relative validation tolerance", "模型验证比例": "Model validation fraction",
     "收敛状态": "Convergence", "实际轮数": "Epochs trained", "最佳轮数": "Best epoch",

@@ -127,7 +127,8 @@ def main():
     with np.load(original_output / "repeat_000/masks.npz") as masks:
         available = masks["observed"] & ~masks["evaluation_hidden"]
         empty = ~available.any(axis=0)
-        assert empty.any() and not masks["training_hidden"].any()
+        assert empty.any() and masks["training_hidden"].any()
+        assert not (masks["training_hidden"] & masks["evaluation_hidden"]).any()
         excluded = int(masks["evaluation_hidden"][:, empty].sum())
         assert (original.zero_cols == int(empty.sum())).all()
         assert (original.n_excluded == excluded).all()

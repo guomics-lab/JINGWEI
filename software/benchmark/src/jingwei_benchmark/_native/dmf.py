@@ -19,6 +19,9 @@ class DMFImputer(pl.LightningModule):
         batch_size=1024,
         supervision_mask_tensor=None,
         num_workers=0,
+        dmf_architecture='bilinear',
+        dmf_initialization='random',
+        dmf_rank=None,
     ):
         super(DMFImputer, self).__init__()
 
@@ -59,13 +62,18 @@ class DMFImputer(pl.LightningModule):
         )
 
         n_samples, n_proteins = self.full_data_tensor.shape
-        self.model = DMF(
+        from ..dmf_models import build_dmf
+        self.model = build_dmf(dmf_architecture,
             n_rows=n_samples,
             n_cols=n_proteins,
             embedding_dim=embedding_dim,
+            interaction_dim=dmf_rank,
             hidden_dims=hidden_dims,
             mask_predictor_hidden_dim=hidden_dims[0] if hidden_dims else 128,
         )
+        if callable(getattr(self.model,'initialize_from_observed',None)) and dmf_initialization=='svd':
+            self.model.initialize_from_observed(self.full_data_tensor*self.full_mask_tensor,
+                                               self.full_mask_tensor.bool())
 
         self.batch_size = batch_size
         self.learning_rate = lr

@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 torch = pytest.importorskip("torch")
-from jingwei_benchmark._native.models import DMF
+from jingwei_benchmark._native.models import LegacyDMF as DMF
 from jingwei_benchmark.torch_engine import factorize_dmf, masked_loss
 
 

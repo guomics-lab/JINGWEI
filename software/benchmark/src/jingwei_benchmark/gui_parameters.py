@@ -2,9 +2,11 @@
 
 import math
 
+from .convergence import DEFAULT_MAX_EPOCHS
+
 # name: (label, default, lower, upper); list values use comma-separated positive dimensions.
 NEURAL = {
-    "max_epochs": ("最大训练轮数", 5000, 1, 100000),
+    "max_epochs": ("最大训练轮数", DEFAULT_MAX_EPOCHS, 1, 100000),
     "patience": ("早停等待轮数", 30, 1, 100000),
     "min_epochs": ("最少训练轮数", 30, 1, 100000),
     "min_delta": ("验证相对改善阈值", .0001, .00000001, .99),
@@ -38,6 +40,7 @@ PARAMETERS["mice-pmm"].update({"donors": ("PMM 候选供体数", 5, 1, 10000),
                                "ridge": ("线性正则强度", 0.00001, 0.00000001, 1.0)})
 for name in ("jingwei-dmf", "jingwei-dcae", "pimms-dae", "pimms-vae", "pimms-cf"):
     PARAMETERS[name] = dict(NEURAL)
+PARAMETERS['jingwei-dmf']['dmf_rank'] = ('交互秩',8,1,100000)
 PARAMETERS["jingwei-dcae"].update({
     "ae_dropout": ("Dropout", .1, 0., .99),
     "mask_predictor_hidden_dim": ("掩蔽预测器维度", 256, 1, 100000),

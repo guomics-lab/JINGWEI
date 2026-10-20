@@ -1,12 +1,13 @@
 """Compatibility runner using the original Lightning Imputer wrappers."""
 
 import numpy as np
+import hashlib
 import time
 
 
 def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed, folder=None):
     started = time.perf_counter()
-    from .convergence import validation_split, ValidationMonitor
+    from .convergence import validation_split, ValidationMonitor, DEFAULT_MAX_EPOCHS
     original_available = np.isfinite(matrix)
     validation_hidden = validation_split(matrix, training_hidden, params, seed, folder)
     original_matrix = matrix
@@ -51,6 +52,9 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
             hidden_dims=params.get("hidden_dims", [256, 128]),
             mask_weight=params.get("mask_weight", 0.5),
             lr=params.get("learning_rate", 0.001),
+            dmf_architecture=params.get('dmf_architecture','bilinear'),
+            dmf_initialization=params.get('dmf_initialization','random'),
+            dmf_rank=params.get('dmf_rank'),
         )
     else:
         model = DCAEImputer(
@@ -78,7 +82,7 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
                 prediction = module.get_imputed_data().detach().cpu().numpy() * sd + mean
             loss = float(np.mean((prediction[validation_hidden] - original_matrix[validation_hidden]) ** 2))
             trainer.should_stop = monitor.observe(trainer.current_epoch + 1, loss, module.model)
-            if monitor.wait and monitor.wait % max(1, monitor.patience // 3) == 0:
+            if monitor.early_stopping and monitor.wait and monitor.wait % max(1, monitor.patience // 3) == 0:
                 for optimizer in trainer.optimizers:
                     for group in optimizer.param_groups:
                         group['lr'] = max(group['lr'] * .5, 1e-7)
@@ -87,7 +91,7 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
 
     recorder = TrainingDeviceRecorder()
     trainer = pl.Trainer(
-        max_epochs=params.get("max_epochs", 50),
+        max_epochs=params.get("max_epochs", DEFAULT_MAX_EPOCHS),
         accelerator=device,
         devices=1,
         logger=False,
@@ -108,6 +112,9 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
     # Lightning tears down the accelerator after fit and moves the module to CPU.
     # Restore the requested device for inference, including all registered buffers.
     model.to(device)
+    if folder is not None and monitor.policy in ('fixed', 'fixed-validation'):
+        from pathlib import Path
+        torch.save({'state_dict':model.model.state_dict(), 'epoch':trainer.current_epoch}, Path(folder) / 'last_model.pt')
     monitor.restore(model.model)
     if monitor.enabled:
         model.full_data_tensor.copy_(torch.as_tensor(np.where(original_available, (original_matrix - mean) / sd, 0), dtype=torch.float32, device=device))
@@ -128,6 +135,8 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
         "supervision_entries_per_epoch": int(available.sum()),
         "training_input_entries": int((available & ~training_hidden).sum()),
         "training_hidden_entries": int(training_hidden.sum()),
+        "training_mask_sha256": hashlib.sha256(training_hidden.tobytes()).hexdigest(),
+        "training_mask_policy": "fixed for entire fit",
         **monitor.metadata(),
         "input_observations": int(original_available.sum()),
         "mask_loss_scope": "all input mask entries; no missing intensity targets",
@@ -142,6 +151,12 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
                     precision="float32", epochs_trained=trainer.current_epoch, training_steps=trainer.global_step,
                     initialization_s=initialized-started, training_s=trained-initialized, prediction_s=finished-trained)
     metadata["model_parameters"] = sum(parameter.numel() for parameter in model.parameters())
+    if name == 'jingwei-dmf':
+        metadata.update(model_architecture_version=getattr(model.model,'architecture_version','legacy-dmf-v1'),
+            dmf_architecture=params.get('dmf_architecture','bilinear'),
+            dmf_interaction_rank=getattr(model.model,'interaction_dim',None),
+            dmf_initialization=getattr(model.model,'initialization',{'method':'legacy random embeddings'}),
+            mask_head_input='row latent' if hasattr(model.model,'row_tower') else 'reconstruction')
     if name == "jingwei-dcae":
         metadata.update(ae_architecture=params.get("ae_architecture", "global"),
                         model_architecture_version=getattr(model.model, "architecture_version", "native-dcae-v1"),

@@ -1,11 +1,12 @@
 """Lean PyTorch execution of the native JINGWEI networks.
 
-The published package is unchanged. This adapter keeps its architectures,
-normalization, two-mask objective and AdamW settings while avoiding per-row GPU
-DataLoader collation and Lightning metric bookkeeping in isolated benchmarks.
+The published package is unchanged. The software uses bilinear DMF and global
+DCAE with fixed model-supplied denoising masks, known reconstruction targets and
+AdamW, avoiding per-row GPU collation and Lightning metric bookkeeping.
 """
 
 import random
+import hashlib
 import time
 import types
 
@@ -83,15 +84,17 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed, fo
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    from .convergence import validation_split, ValidationMonitor
+    from .convergence import validation_split, ValidationMonitor, DEFAULT_MAX_EPOCHS
     original_available = np.isfinite(matrix)
     validation_hidden = validation_split(matrix, training_hidden, params, seed, folder)
     fit_matrix = np.where(validation_hidden, np.nan, matrix)
     normalized, available, mean, sd = normalize(fit_matrix)
     monitor = ValidationMonitor(params, enabled=validation_hidden.any(), validation_mask=validation_hidden)
     if name == "jingwei-dmf":
-        model = DMF(n_rows=len(matrix), n_cols=matrix.shape[1],
+        from .dmf_models import build_dmf
+        model = build_dmf(params.get('dmf_architecture','bilinear'),n_rows=len(matrix), n_cols=matrix.shape[1],
                     embedding_dim=params.get("latent_dim", 64),
+                    interaction_dim=params.get('dmf_rank'),
                     hidden_dims=params.get("hidden_dims", [256, 128]),
                     mask_predictor_hidden_dim=(params.get("hidden_dims", [256, 128]) or [128])[0])
         factorized = factorize_dmf(model)
@@ -105,6 +108,10 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed, fo
                      dilation=params.get("dilation", 2))
         factorized = False
         print(f"AE architecture={params.get('ae_architecture', 'global')} | parameters={sum(p.numel() for p in model.parameters())}", flush=True)
+    if name == 'jingwei-dmf' and callable(getattr(model,'initialize_from_observed',None)):
+        if params.get('dmf_initialization','random')=='svd':
+            visible=torch.as_tensor(available & ~training_hidden)
+            model.initialize_from_observed(torch.from_numpy(normalized)*visible,visible)
     model.to(device)
     target = torch.from_numpy(normalized).to(device)
     input_mask = torch.as_tensor(available & ~training_hidden, dtype=torch.float32, device=device)
@@ -119,7 +126,7 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed, fo
                         shuffle=True, num_workers=0)
     optimizer = torch.optim.AdamW(model.parameters(), lr=params.get("learning_rate", 0.001), weight_decay=1e-5)
     weight = params.get("mask_weight", 0.5)
-    epochs = params.get("max_epochs", 50)
+    epochs = params.get("max_epochs", DEFAULT_MAX_EPOCHS)
 
     def synchronize():
         if device == "cuda":
@@ -174,7 +181,7 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed, fo
             stop = monitor.observe(epoch + 1, validation_loss, model)
             # Give optimization a chance to improve at smaller steps before
             # declaring a validation plateau. This never consults test scores.
-            if monitor.wait and monitor.wait % max(1, monitor.patience // 3) == 0:
+            if monitor.early_stopping and monitor.wait and monitor.wait % max(1, monitor.patience // 3) == 0:
                 for group in optimizer.param_groups:
                     group['lr'] = max(group['lr'] * .5, 1e-7)
             if epoch == 0 or (epoch + 1) % 10 == 0 or stop:
@@ -186,6 +193,9 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed, fo
             print(f"Epoch {epoch+1}/{epochs} | loss={float(total_loss / max(1, batches)):.6g} | steps={steps}", flush=True)
     synchronize()
     trained = time.perf_counter()
+    if folder is not None and monitor.policy in ('fixed', 'fixed-validation'):
+        from pathlib import Path
+        torch.save({'state_dict':model.state_dict(), 'epoch':epochs_trained}, Path(folder) / 'last_model.pt')
     monitor.restore(model)
     model.eval()
     # Validation observations are available input at final inference. The
@@ -227,6 +237,8 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed, fo
         "supervision_entries_per_epoch": int(available.sum()),
         "training_input_entries": int((available & ~training_hidden).sum()),
         "training_hidden_entries": int(training_hidden.sum()),
+        "training_mask_sha256": hashlib.sha256(training_hidden.tobytes()).hexdigest(),
+        "training_mask_policy": "fixed for entire fit",
         "mask_loss_scope": "all input mask entries; no missing intensity targets",
         "mask_supervision_entries_per_epoch": int(available.size),
         "mask_positive_entries": int((available & ~training_hidden).sum()),
@@ -234,6 +246,12 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed, fo
         "initialization_s": initialized - started, "training_s": trained - initialized,
         "prediction_s": finished - trained,
         "model_parameters": sum(parameter.numel() for parameter in model.parameters()),
+        **({'model_architecture_version':getattr(model,'architecture_version','legacy-dmf-v1'),
+            'dmf_architecture':params.get('dmf_architecture','bilinear'),
+            'dmf_interaction_rank':getattr(model,'interaction_dim',None),
+            'dmf_initialization':getattr(model,'initialization',{'method':'legacy random embeddings'}),
+            'mask_head_input':'row latent' if hasattr(model,'row_tower') else 'reconstruction'}
+           if name=='jingwei-dmf' else {}),
         **({"ae_architecture": params.get("ae_architecture", "global"),
             "model_architecture_version": getattr(model, "architecture_version", "native-dcae-v1"),
             "ae_dropout": params.get("ae_dropout", .1) if getattr(model, "mask_aware", False) else 0.,

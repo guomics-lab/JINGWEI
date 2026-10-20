@@ -24,9 +24,22 @@ class SessionState:
             from .protocol import ORIGINAL_MECHANISM, JINGWEI_MECHANISM
             if fields.get("mechanism") == ORIGINAL_MECHANISM:
                 fields["mechanism"] = JINGWEI_MECHANISM
-        if "training_policy" not in fields and fields.get("max_epochs") == 50:
+        parameters = data.get("parameters", {})
+        if data.get("fixed_budget_version") != 1:
+            # One-time upgrade of the historical shared defaults to the new
+            # fixed-budget policy: a saved form without a policy at the old
+            # 50/5000 epochs, including old explicit default-policy records.
+            # Custom budgets and explicit non-default policies keep their values,
+            # and task records on disk are never rewritten.
             from .convergence import DEFAULT_MAX_EPOCHS
-            fields["max_epochs"] = DEFAULT_MAX_EPOCHS
+            without_policy = "training_policy" not in fields
+            if fields.get("max_epochs") in (50, 5000) and fields.get("training_policy") in (None,'fixed','convergence'):
+                fields["training_policy"] = "fixed"
+                fields["max_epochs"] = DEFAULT_MAX_EPOCHS
+            if isinstance(parameters, dict):
+                for settings in parameters.values():
+                    if isinstance(settings, dict) and settings.get("max_epochs") in (50,5000):
+                        settings["max_epochs"] = DEFAULT_MAX_EPOCHS
         # Historical protocol, repeat and training-mask controls are no longer
         # part of the desktop form. Unknown saved fields are ignored below.
         for key, widget in self.fields.items():
@@ -62,7 +75,6 @@ class SessionState:
         if isinstance(methods, list) and all(isinstance(name, str) for name in methods):
             for name, box in self.method_checks.items():
                 box.setChecked(name in methods)
-        parameters = data.get("parameters", {})
         if isinstance(parameters, dict):
             from .gui_parameters import PARAMETERS, valid_overrides
             self.method_parameters = {name: valid_overrides(name, settings)
@@ -115,7 +127,7 @@ class SessionState:
 
     def save_session(self):
         from .gui import value
-        data = {"schema": 1, "mnar_rule_version": 2, "dcae_architecture_version": "global-ae-v1",
+        data = {"schema": 1, "mnar_rule_version": 2, "fixed_budget_version": 1, "dcae_architecture_version": "global-ae-v1",
                 "fields": {key: value(widget) for key, widget in self.fields.items()},
                 "input": self.input_path.text(), "methods": [name for name, box in self.method_checks.items() if box.isChecked()],
                 "parameters": self.method_parameters, "w2_features": self._pending_features[1] if self._pending_features else self.feature_selection,

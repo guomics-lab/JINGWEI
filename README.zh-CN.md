@@ -23,8 +23,8 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.6/jingwei-Windows-Setup.exe"><strong>下载 Windows 软件安装包（.exe）</strong></a> ·
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.6">Linux CLI</a>
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-Windows-Setup.exe"><strong>下载 Windows 软件安装包（.exe）</strong></a> ·
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7">Linux CLI</a>
 </p>
 
 只需下载一个 EXE 并运行，其余文件由安装程序自动获取。安装后从 **开始菜单 → jingwei** 打开软件。
@@ -36,7 +36,7 @@ JINGWEI 是一个用于蛋白质组数据缺失值插补的深度学习框架，
 | 你的需求 | 使用产品 | 开始使用 |
 | --- | --- | --- |
 | 用 **DMF / DCAE** 处理自己的数据 | JINGWEI Python 包 | [快速开始](#快速开始) · [Python API](#python-api-示例) |
-| 比较 **35 种插补方法** | 独立的 jingwei 软件 | [Windows 安装包](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.6/jingwei-Windows-Setup.exe) · [使用指南](software/benchmark/README.md) |
+| 比较 **35 种插补方法** | 独立的 jingwei 软件 | [Windows 安装包](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-Windows-Setup.exe) · [使用指南](software/benchmark/README.md) |
 
 ## 功能
 
@@ -174,13 +174,15 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 ## Benchmark 软件
 
-[**下载 Windows 安装包（.exe）**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.6/jingwei-Windows-Setup.exe) · [安装说明](software/benchmark/RELEASE-1.0.6.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.6)
+[**下载 Windows 安装包（.exe）**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-Windows-Setup.exe) · [安装说明](software/benchmark/RELEASE-1.0.7.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7)
 
-上方链接为 **1.0.6** Windows 安装包，软件名称为 **jingwei**，Python、R 及各方法依赖均已打包。Windows 原生界面支持 **中文 / English**，默认加载内置的 `data/Alzheimer.csv`。
+上方链接为 **1.0.7** Windows 安装包，软件名称为 **jingwei**，Python、R 及各方法依赖均已打包。Windows 原生界面支持 **中文 / English**，默认加载内置的 `data/Alzheimer.csv`。
 
 选择数据、方法和输出目录后，点击 **开始**。运行设置仅保留 **任务、缺失机制、掩蔽比例** 三项；设备及模型参数在 **高级设置** 中。GUI 每次运行一次。**日志**实时显示进度；任务提交、运行及停止处理中锁定配置，结束后恢复编辑。**复制配置**恢复当前任务的通用设置及各方法实际参数。任务名留空时自动生成为 `task-YYYYMMDD-HHMMSS`。界面已移除 **打开任务** 按钮。启动时结果为空，计算环境检查在主界面出现前完成，有效缓存和表单设置会复用。安装许可使用纯文本。
 
-平台只统一构造一次测试掩蔽，将同一份缺失矩阵交给所有方法，各模型自行完成训练、验证及去噪；测试真值不传给模型。1.0.6 的 **MNAR · JINGWEI** 按每个蛋白的 z 分数计算 `p = sigmoid(-z + b)`，校准到所选目标比例，实际比例写入日志；历史规则仅保留作兼容选项。五个神经网络按各自的验证集表现停止并恢复最佳权重，达到轮数或时间上限不算确认收敛。此前阿尔兹海默数值仅对应各自记录的软件版本和评测协议，不能直接视为本次修正后的结果。详见[测试报告](software/benchmark/SE_TESTS.md)。
+平台统一构造一次评测掩蔽，将同一份缺失矩阵交给所有方法；测试真值不传给模型。**1.0.7 更新**：DMF/DCAE 再固定构造一次去噪训练掩蔽，被隐藏的原有观测值仍作为监督目标；五个神经网络均默认跑满 **500 轮**，不提前停止、不再额外划内部验证集，使用第 500 轮权重。DMF 改为显式双线性交互与共享行潜变量的掩码预测头。该流程与 1.0.6 的验证停止实验不同。
+
+**MNAR · JINGWEI** 按每个蛋白的 z 分数计算 `p = sigmoid(-z + b)`，校准到所选目标比例，实际比例写入日志；历史规则仅保留作兼容选项。此前阿尔兹海默数值仅对应各自记录的软件版本和评测协议，不能直接视为本次修正后的结果。详见[测试报告](software/benchmark/SE_TESTS.md)。
 
 选择 **插补** 时，“训练缺失机制”和“训练掩蔽比例”用于 JINGWEI DMF/DCAE 的训练数据构造：人工遮住一部分观测值作为训练输入，其原始值保留为监督目标。推断使用原始输入，输出保留原有观测值；其他方法仍按各自流程处理。选择 **评测** 时，这两项用于所有方法共用的测试掩蔽。
 

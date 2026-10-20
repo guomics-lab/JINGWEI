@@ -9,20 +9,26 @@ from jingwei_benchmark.cli import main
 
 
 @pytest.mark.parametrize('mechanism', ['mcar', 'mnar-jingwei-v2'])
-def test_all_35_methods_receive_identical_single_mask_input(tmp_path,monkeypatch,mechanism):
+def test_all_35_methods_share_test_input_and_only_jingwei_gets_fixed_training_mask(tmp_path,monkeypatch,mechanism):
     import hashlib
     import jingwei_benchmark.benchmark as orchestration
     from jingwei_benchmark.methods import METHODS
     source=fixture(tmp_path)
     received=[]
+    training_masks={}
     def availability(*args,names=None,**kwargs):
         return {name:{'available':True,'reason':None} for name in names}
     def worker(payload,*args):
         path=__import__('pathlib').Path(payload['input_file'])
         with np.load(path) as bundle:
-            assert not bundle['training_hidden'].any()
             values=bundle['values'].copy()
-        received.append((payload['method'],path,hashlib.sha256(path.read_bytes()).hexdigest()))
+            hidden=bundle['training_hidden'].copy()
+        if payload['method'].startswith('jingwei-'):
+            assert hidden.any() and np.isfinite(values[hidden]).all()
+            training_masks[payload['method']]=hidden
+        else:
+            assert not hidden.any()
+        received.append((payload['method'],path,hashlib.sha256(values.tobytes()).hexdigest()))
         filled=np.where(np.isfinite(values),values,np.nanmean(values,axis=0)[None,:])
         np.savez(__import__('pathlib').Path(payload['folder'])/'predictions.npz',values=filled)
         return {'status':'completed','time_s':0.}
@@ -32,9 +38,13 @@ def test_all_35_methods_receive_identical_single_mask_input(tmp_path,monkeypatch
     assert main(['benchmark','--input',str(source),'--methods','all','--device','cpu',
                  '--mechanism',mechanism,'--output',str(output)])==0
     assert {r[0] for r in received}==set(METHODS) and len(received)==35
-    assert len({(r[1],r[2]) for r in received})==1
+    assert len({r[2] for r in received})==1
+    np.testing.assert_array_equal(training_masks['jingwei-dmf'],training_masks['jingwei-dcae'])
+    with np.load(output/'repeat_000/masks.npz') as masks:
+        assert not (masks['evaluation_hidden'] & masks['training_hidden']).any()
+        np.testing.assert_array_equal(masks['training_hidden'],training_masks['jingwei-dmf'])
     manifest=json.loads((output/'manifest.json').read_text())
-    assert manifest['mask_protocol_version']==3
+    assert manifest['mask_protocol_version']==4
     assert manifest['effective_protocol']['platform_mask_count']==1
 
 

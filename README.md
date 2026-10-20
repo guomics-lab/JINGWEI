@@ -23,8 +23,8 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.6/jingwei-Windows-Setup.exe"><strong>Download jingwei for Windows (.exe)</strong></a> ·
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.6">Linux CLI</a>
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-Windows-Setup.exe"><strong>Download jingwei for Windows (.exe)</strong></a> ·
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7">Linux CLI</a>
 </p>
 
 Download one EXE and run it; the installer handles the remaining files. After installation, open **Start → jingwei**.
@@ -177,9 +177,9 @@ DCAE; the published Python package and earlier installers are unchanged.
 
 ## Benchmark software
 
-[**Download Windows installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.6/jingwei-Windows-Setup.exe) · [Installation](software/benchmark/RELEASE-1.0.6.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.6)
+[**Download Windows installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-Windows-Setup.exe) · [Installation](software/benchmark/RELEASE-1.0.7.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7)
 
-The **1.0.5** Windows application is named **jingwei** and bundles Python, R and method dependencies. Its
+The **1.0.7** Windows application is named **jingwei** and bundles Python, R and method dependencies. Its
 native Windows GUI supports **中文 / English** and includes `data/Alzheimer.csv`.
 
 Choose data, methods and an output folder. Run settings contain only **Task**,
@@ -197,12 +197,15 @@ the original input and preserves its observed values. Comparison methods retain
 their own procedures. These controls configure the shared test mask in Benchmark.
 
 One test mask is shared across all methods. Every method receives the same
-corrupted dataset and owns its training/validation procedure; the platform adds
-no training mask. Version 1.0.6's **MNAR · JINGWEI** uses within-protein z-scores
+corrupted dataset. The current source additionally constructs one fixed denoising
+mask for DMF/DCAE only, preserving the hidden training values as known targets.
+The five neural models run **500 epochs without early stopping**, using the last
+epoch weights and no extra internal validation split. DMF now uses explicit
+bilinear interactions and a latent mask head. The 1.0.7 release includes these changes.
+**MNAR · JINGWEI** uses within-protein z-scores
 and `p = sigmoid(-z + b)`, calibrated to the selected expected mask rate.
 The actual rate is logged. The historical rule remains a compatibility option.
-All five neural models use model-owned validation stopping and restore their
-best weights; reaching an epoch/time cap does not certify convergence.
+Earlier 1.0.6 results used a different validation-stopping protocol.
 Earlier Alzheimer numbers describe their recorded software/protocol version;
 they do not establish results for this revised protocol.
 See the [verification report](software/benchmark/SE_TESTS.md).

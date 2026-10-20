@@ -1,5 +1,50 @@
 # Software verification
 
+## 1.0.7 fixed 500 epochs and revised DMF — 2026-10-20
+
+The full Alzheimer input and common MNAR v2 test mask are unchanged: 255,165
+observations, 50,790 artificial test positions (19.9048%) and 204,375 common input
+entries. Following the selected training protocol, DMF/DCAE receive one fixed
+additional MNAR mask of 41,065 known training positions (20.09297% of available
+input). They see 163,310 training input entries but supervise all 204,375 known
+targets. The training mask is disjoint from final test positions and never
+redrawn. Other methods get the common input without this additional mask.
+
+All five neural methods completed 500 epochs, without early stopping or an extra
+internal validation split. Scores use epoch-500 weights, not a selected earlier
+test result. All five final checkpoints and the independently recomputed scores
+were verified. Known input values are preserved in exports.
+
+| Method | Epochs | Test MSE |
+| --- | ---: | ---: |
+| Revised DMF | 500 | 0.578734 |
+| DCAE | 500 | 0.631094 |
+| PIMMS DAE | 500 | 0.639020 |
+| PIMMS VAE | 500 | 0.601611 |
+| PIMMS CF | 500 | 1.118914 |
+| Legacy DMF control, same protocol | 500 | 0.649728 |
+| Mean | — | 1.006040 |
+| KNN | — | 0.665941 |
+
+The revised architecture reduces MSE 10.93% against the legacy DMF control at the
+same 500 epochs and identical masks. It uses signed bilinear interactions, row/
+column biases, residual neural towers and a mask head sharing row embeddings.
+Rank 8 and small random initialization were selected using an input-only shadow
+validation experiment, comparing epoch-500 loss before accessing new test scores.
+That diagnostic partition is not used in the final fit or default application.
+The architecture is generic, with no Alzheimer-specific dispatch. DCAE was not
+redesigned. The published Python package and manuscript were not changed.
+
+This is one dataset/mask, not a universal performance claim. PIMMS CF is worse
+at the fixed budget; running 500 epochs does not eliminate overfitting. The older
+validation-stopping experiment below has a different training protocol and must
+not be substituted for these rows. Runtime measurements include concurrent local
+work and are not a controlled speed comparison.
+
+Evidence: `results/dmf-500-20261020/architecture-decision.json`,
+`final-verification.json`, `AD-fixed500-summary.csv`, the complete `ad-fixed500/`
+run and its same-budget `ad-legacy-fixed500/` control.
+
 ## 1.0.6 release checks — 2026-10-20
 
 The final Windows test union covers all 307 collected cases: 305 passed, two

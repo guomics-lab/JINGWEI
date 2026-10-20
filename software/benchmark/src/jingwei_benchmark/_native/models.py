@@ -272,7 +272,7 @@ class LegacyDCAE(nn.Module):
 from ..ae_models import GlobalDCAE as DCAE
 
 
-class DMF(nn.Module):
+class LegacyDMF(nn.Module):
     def __init__(
         self,
         n_rows,
@@ -281,7 +281,7 @@ class DMF(nn.Module):
         hidden_dims=[256, 128],
         mask_predictor_hidden_dim=128,
     ):
-        super(DMF, self).__init__()
+        super().__init__()
         self.n_rows = n_rows
         self.n_cols = n_cols
         self.embedding_dim = embedding_dim
@@ -378,3 +378,6 @@ class DMF(nn.Module):
             imputed_data[unobserved_mask] = full_matrix[unobserved_mask]
 
         return imputed_data
+
+
+from ..dmf_models import BilinearDMF as DMF

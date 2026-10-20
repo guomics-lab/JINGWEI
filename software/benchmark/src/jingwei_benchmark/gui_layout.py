@@ -399,7 +399,9 @@ class WorkbenchLayout:
         self.field(form, "device", "计算设备", self.options(devices))
         self.field(form, "jingwei_preset", "JINGWEI 参数预设", self.options([("通用设置", "standard"), ("原始 benchmark 参数", "original-benchmark")]))
         self.field(form, "training_engine", "JINGWEI 训练引擎", self.options([("PyTorch（较快）", "torch"), ("Lightning（兼容）", "lightning")]))
-        self.field(form, "training_policy", "训练终止方式", self.options([("验证集收敛", "convergence"), ("固定轮数（诊断）", "fixed")]))
+        self.field(form, "training_policy", "训练终止方式", self.options([
+            ("固定轮数", "fixed"),
+            ("验证集收敛", "convergence")]))
         for key, spec in NEURAL.items():
             self.field(form, key, spec[0], control(spec))
         if cuda_supported():

@@ -110,14 +110,14 @@ def cached_loaders(enabled, *, points, method):
 
 
 @contextmanager
-def convergent_fitting(monitor):
+def convergent_fitting(monitor, folder=None):
     """Keep native PIMMS models/loss/LR finder, then fit to a validation plateau.
 
     A fixed-epoch one-cycle schedule ties its warmup to the arbitrary epoch cap.
     In convergence mode use its LR-finder suggestion with plateau LR reduction,
     best-state restoration and an explicit safety cap instead.
     """
-    if not monitor.enabled:
+    if not monitor.enabled and monitor.policy != 'fixed':
         yield
         return
     from fastai.learner import Learner
@@ -132,7 +132,7 @@ def convergent_fitting(monitor):
             index = list(self.learn.recorder.metric_names[1:]).index('valid_loss')
             loss = float(self.learn.recorder.values[-1][index])
             stop = monitor.observe(self.epoch + 1, loss, self.learn.model)
-            if monitor.wait and monitor.wait % max(1, monitor.patience // 3) == 0:
+            if monitor.early_stopping and monitor.wait and monitor.wait % max(1, monitor.patience // 3) == 0:
                 for hyper in self.learn.opt.hypers:
                     hyper['lr'] = max(hyper['lr'] * .5, 1e-7)
             print(f"Validation | epoch={self.epoch+1} | native loss={loss:.6g} | best={monitor.best:.6g} | wait={monitor.wait}/{monitor.patience}", flush=True)
@@ -140,12 +140,24 @@ def convergent_fitting(monitor):
                 raise CancelFitException()
 
         def after_fit(self):
+            if folder is not None and monitor.policy == 'fixed-validation':
+                import torch
+                torch.save({'state_dict':self.learn.model.state_dict(), 'epoch':self.epoch+1},
+                           Path(folder) / 'last_model.pt')
             monitor.restore(self.learn.model)
 
     original = Learner.fit_one_cycle
     def fit_to_plateau(learn, n_epoch, lr_max=None, **kwargs):
         learn.remove_cb(EarlyStoppingCallback)
-        return learn.fit(n_epoch, lr=lr_max, cbs=[ConvergenceCallback()])
+        callbacks = kwargs.pop('cbs', None) or []
+        if not isinstance(callbacks, (list, tuple)):
+            callbacks = [callbacks]
+        callbacks = [cb for cb in callbacks if not isinstance(cb, EarlyStoppingCallback)]
+        if monitor.enabled:
+            callbacks.append(ConvergenceCallback())
+        if monitor.early_stopping:
+            return learn.fit(n_epoch, lr=lr_max, cbs=callbacks, **kwargs)
+        return original(learn, n_epoch, lr_max=lr_max, cbs=callbacks, **kwargs)
     Learner.fit_one_cycle = fit_to_plateau
     try:
         yield
@@ -155,7 +167,7 @@ def convergent_fitting(monitor):
 
 def run_pimms(name, matrix, training_hidden, params, *, device, seed, folder):
     folder = Path(folder)
-    from .convergence import validation_split, ValidationMonitor
+    from .convergence import validation_split, ValidationMonitor, DEFAULT_MAX_EPOCHS
     selection = validation_split(matrix, training_hidden, params, seed, folder)
     monitor = ValidationMonitor(params, enabled=selection.any(), validation_mask=selection,
                                 metric='native PIMMS validation loss')
@@ -186,9 +198,9 @@ def run_pimms(name, matrix, training_hidden, params, *, device, seed, folder):
     frame.index.name, frame.columns.name = "sample", "feature"
     validation_mask = selection if monitor.enabled else training_hidden
     train, validation = frame.mask(corruption), frame.where(validation_mask)
-    options = dict(epochs_max=params.get("max_epochs", 50), cuda=device == "cuda")
+    options = dict(epochs_max=params.get("max_epochs", DEFAULT_MAX_EPOCHS), cuda=device == "cuda")
     engine = params.get("baseline_engine", "optimized")
-    with cached_loaders(engine == "optimized", points=matrix.size, method=name) as acceleration, epoch_logging(engine == "optimized"), convergent_fitting(monitor):
+    with cached_loaders(engine == "optimized", points=matrix.size, method=name) as acceleration, epoch_logging(engine == "optimized"), convergent_fitting(monitor, folder):
         if name == "pimms-cf":
             from pimmslearn.sklearn.cf_transformer import CollaborativeFilteringTransformer
 
@@ -246,13 +258,16 @@ def run_pimms(name, matrix, training_hidden, params, *, device, seed, folder):
         "training_observations": int(train.notna().to_numpy().sum()),
         **monitor.metadata(),
         "validation_observations": int(validation_mask.sum()),
-        "learning_rate_schedule": "validation-plateau" if monitor.enabled else "native one-cycle",
+        "learning_rate_schedule": "validation-plateau" if monitor.early_stopping else "native one-cycle",
         "batch_size": params.get("batch_size", 64),
         "effective_batch_size": int(learner.dls.train.bs),
     }
     if monitor.restored:
         torch.save({'state_dict':learner.model.state_dict(), 'best_epoch':monitor.best_epoch},
                    folder / 'best_model.pt')
+    elif monitor.policy == 'fixed':
+        torch.save({'state_dict':learner.model.state_dict(), 'epoch':int(model.epochs_trained_)},
+                   folder / 'last_model.pt')
     # Native plots remain available; close them after fitting to release memory.
     from matplotlib import pyplot as plt
     plt.close("all")

@@ -307,8 +307,7 @@ def protocol_masks(
     )
     available = observed & ~evaluation
     if training_rate == 0:
-        # Benchmark orchestration always takes this path. The second-mask
-        # utility remains available to an explicit model-owned training caller.
+        # Traditional/PIMMS-only runs do not need JINGWEI denoising corruption.
         training = np.zeros_like(observed)
         metadata["training"] = {
             "mechanism": None, "eligible_count": int(available.sum()),

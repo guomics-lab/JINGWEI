@@ -175,7 +175,8 @@ def run_experiment(args):
         if args.methods == ["all"]
         else list(dict.fromkeys(canonical_name(n) for n in args.methods))
     )
-    training_methods = [name for name in methods if name.startswith("jingwei-")] if args.command == "impute" else []
+    notebook = args.command == "benchmark" and getattr(args, "evaluation_protocol", "fair") == "original-notebook"
+    training_methods = [] if notebook else [name for name in methods if name.startswith("jingwei-")]
     if training_methods and uses_mask_rate(args.mechanism, args.paper_probabilities) and not 0 <= args.mask_rate < 1:
         raise ValueError("JINGWEI training mask rate must be in [0,1)")
     if args.output.exists() and any(args.output.iterdir()):
@@ -260,7 +261,7 @@ def run_experiment(args):
         "observed_count": int(data.observed.sum()),
         "evaluation_scale": data.scale,
         "input_scale": args.scale,
-        "mask_protocol_version": 3,
+        "mask_protocol_version": 3 if notebook else 4,
         "effective_protocol": ({"name": "original-notebook", "source_revision": "98686b54fdb9918a4d4cc9d99ac4880a6dadcefe",
             "seed": args.seed, "repeats": 1, "input": "raw CSV; first column discarded",
             "preprocessing": "log2 positives; original float32 pre-mask mean/std",
@@ -269,7 +270,9 @@ def run_experiment(args):
             "scoring": "exclude empty columns and nonfinite predictions; record excluded counts",
             "rng": "original method order; Python/NumPy/Torch streams carried between workers"} if notebook else
             {"name": "fair", "evaluation": args.mechanism,
-             "training": "method-owned; no platform training mask",
+             "training": "one fixed JINGWEI-only denoising mask after common evaluation masking; known targets retained",
+             "training_methods": training_methods,
+             "training_mechanism": args.mechanism if training_methods else None,
              "platform_mask_count": 1,
              "normalization": "training-available observations only"} if args.command == "benchmark" else
             {"name": "impute", "evaluation": "not-applied", "platform_mask_count": 0,
@@ -403,7 +406,7 @@ def run_experiment(args):
                 result = {"status": "skipped", "error": status[method]["reason"]}
             else:
                 preset = preset_parameters("original-benchmark" if notebook else getattr(args, "jingwei_preset", "standard"), method)
-                if not notebook and args.training_policy == "convergence":
+                if not notebook:
                     # Historical hyperparameters must not reintroduce the old
                     # 50-epoch budget into validation-based stopping.
                     preset.pop("max_epochs", None)
@@ -421,6 +424,7 @@ def run_experiment(args):
                     "hidden_dims": args.hidden_dims,
                     "learning_rate": args.learning_rate,
                     "mask_weight": args.mask_weight,
+                    "dmf_rank": args.dmf_rank,
                     "ae_architecture": getattr(args, "ae_architecture", None) or ("native" if notebook else "global"),
                     "evaluation_protocol": "original-notebook" if notebook else "fair",
                     **preset,

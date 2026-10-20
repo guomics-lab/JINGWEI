@@ -111,10 +111,13 @@ def parser():
                        help="MICE-PMM implementation: Python linear ridge/PMM (default), or original R mice")
         p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS,
                        help="maximum seconds per method/repeat (default: 1800; 30 min)")
-        p.add_argument("--training-policy", choices=("convergence", "fixed"), default="convergence",
-                       help="convergence: model-owned validation plateau and best checkpoint; fixed: diagnostic epoch budget")
+        p.add_argument("--training-policy", choices=("fixed", "fixed-validation", "convergence"), default="fixed",
+                       help=f"fixed: exactly {DEFAULT_MAX_EPOCHS} epochs by default, no extra validation split or early stopping; "
+                            "fixed-validation: optional internal validation diagnostics with a full epoch budget; "
+                            "convergence: opt-in validation-plateau early stopping")
         p.add_argument("--max-epochs", type=int, default=DEFAULT_MAX_EPOCHS,
-                       help="neural safety cap; reaching it does not confirm convergence")
+                       help=f"epochs trained by the five neural methods (default: {DEFAULT_MAX_EPOCHS}); "
+                            "the default policy trains exactly this many epochs without early stopping")
         p.add_argument("--patience", type=int, default=DEFAULT_PATIENCE)
         p.add_argument("--min-epochs", type=int, default=DEFAULT_MIN_EPOCHS)
         p.add_argument("--min-delta", type=float, default=DEFAULT_MIN_DELTA,
@@ -131,6 +134,8 @@ def parser():
         p.add_argument("--hidden-dims", nargs="+", type=int, default=[256, 128])
         p.add_argument("--learning-rate", type=float, default=0.001)
         p.add_argument("--mask-weight", type=float, default=0.5)
+        p.add_argument("--dmf-rank", type=int, default=8,
+                       help="DMF bilinear interaction rank, capped by its latent dimension (default: 8)")
         p.add_argument("--ae-architecture", choices=("native", "global"), default=None,
                        help="DCAE uses its current global decoder; native explicitly selects the legacy AE. Historical notebook replay always retains its original implementation")
         p.add_argument(
