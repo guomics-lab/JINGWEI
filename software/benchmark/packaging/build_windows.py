@@ -56,6 +56,9 @@ def main():
     from jingwei_benchmark import __version__
     info = {"app_version": __version__, "platform": sys.platform, "python": sys.version, "versions": versions,
             "app_name": "jingwei", "desktop_executable": "jingwei.exe", "console_executable": "jingwei-cli.exe",
+            "packaging_profile": "windows-offline",
+            "excluded_optional_components": ["polars"],
+            "excluded_documentation": "R PDF manuals; legal notices and runtime data retained",
             "startup_environment_check": "before-main-window", "run_settings": ["command", "mechanism", "mask_rate"],
             "bundled_windows_r": True,
             "desktop_languages": ["zh", "en"],

@@ -1,4 +1,4 @@
-"""Build the single-download Windows installer, pinning every payload checksum."""
+"""Build the optional online Windows installer, pinning every payload checksum."""
 
 import argparse
 import hashlib
@@ -20,9 +20,13 @@ def main():
     parser.add_argument("--icon", required=True, type=Path)
     parser.add_argument("--base-url", default=f"https://github.com/guomics-lab/JINGWEI/releases/download/v{__version__}")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--basename", default="jingwei-Windows-Setup",
+                        help="output EXE basename; keep existing published installer files immutable")
     parser.add_argument("--installed-size", type=int, help="unpacked application bytes (defaults to the icon's application folder)")
     parser.add_argument("--test-server", action="store_true", help="allow a loopback HTTP fixture; never publish this build")
     args = parser.parse_args()
+    if not args.basename or Path(args.basename).name != args.basename or any(c in args.basename for c in '/\\:'):
+        parser.error("--basename must be a filename without a directory or extension")
     url = urlparse(args.base_url)
     if not (url.scheme == "https" and url.hostname == "github.com"):
         if not (args.test_server and url.scheme == "http" and url.hostname in ("localhost", "127.0.0.1")):
@@ -61,13 +65,15 @@ def main():
     verify.write_text("procedure VerifyPayload;\nbegin\n" + "\n".join(checks) + "\nend;\n\n"
                       "procedure DeletePayload;\nbegin\n" + "\n".join(cleanup) + "\nend;\n", encoding="utf-8")
     subprocess.run([str(args.iscc.resolve()), f"/DAppVersion={__version__}", f"/DReleaseDir={output}",
+                    f"/DBootstrapFileName={args.basename}",
                     f"/DAppLicense={APPLICATION / 'LICENSE.txt'}", f"/DInstalledSize={installed_size}",
                     f"/DAppIcon={args.icon.resolve()}", f"/DPayloadExe={prefix}.exe",
                     f"/DPayloadInclude={include}", f"/DVerifyInclude={verify}", str(BUILD / "windows-bootstrap.iss")], check=True)
     (output / "windows-installer-manifest.json").write_text(
-        json.dumps({"version": __version__, "test_only": args.test_server,
-                    "installed_size": installed_size, "wizard": "single", "files": manifest}, indent=2), encoding="utf-8")
-    print("Windows single-download installer:", output / "jingwei-Windows-Setup.exe")
+        json.dumps({"version": __version__, "installer": args.basename + ".exe", "test_only": args.test_server,
+                    "installed_size": installed_size, "wizard": "single", "offline": False,
+                    "payload_staging": "selected-installation-volume", "files": manifest}, indent=2), encoding="utf-8")
+    print("Optional Windows online installer:", output / (args.basename + ".exe"))
 
 
 if __name__ == "__main__":

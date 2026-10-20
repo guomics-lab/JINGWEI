@@ -7,6 +7,12 @@
 #ifndef AppVersion
   #error AppVersion must match the application build
 #endif
+#ifndef InstallerDictionaryKB
+  #define InstallerDictionaryKB 524288
+#endif
+#ifndef InstallerBlockThreads
+  #define InstallerBlockThreads 2
+#endif
 
 [Setup]
 AppId={{91575868-B05E-4E1F-BD07-DA7D326C7329}
@@ -29,16 +35,23 @@ SetupIconFile={#SourceDir}\jingwei.ico
 UninstallDisplayIcon={app}\jingwei.exe
 LicenseFile={#SourceDir}\LICENSE.txt
 OutputDir={#ReleaseDir}
+#ifdef SingleFileInstaller
+OutputBaseFilename=jingwei-{#AppVersion}-windows-x86_64-offline
+#else
 OutputBaseFilename=jingwei-{#AppVersion}-windows-x86_64-setup
+#endif
 VersionInfoVersion={#AppVersion}
 VersionInfoDescription=jingwei Setup
-Compression=lzma2/normal
 SolidCompression=yes
 LZMAUseSeparateProcess=yes
-LZMANumBlockThreads=4
 #ifdef SingleFileInstaller
+Compression=lzma2/ultra64
+LZMADictionarySize={#InstallerDictionaryKB}
+LZMANumBlockThreads={#InstallerBlockThreads}
 DiskSpanning=no
 #else
+Compression=lzma2/normal
+LZMANumBlockThreads=4
 DiskSpanning=yes
 DiskSliceSize=1900000000
 SlicesPerDisk=1
@@ -72,7 +85,7 @@ Name: "{autodesktop}\jingwei"; Filename: "{app}\jingwei.exe"; WorkingDir: "{user
 Name: "{autoprograms}\jingwei guide"; Filename: "https://github.com/guomics-lab/JINGWEI/blob/main/software/benchmark/README.md"; Check: not IsValidationInstall
 
 [Run]
-Filename: "{app}\jingwei.exe"; WorkingDir: "{userdocs}"; Description: "{cm:LaunchProgram,jingwei}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\jingwei.exe"; WorkingDir: "{userdocs}"; Description: "{cm:LaunchProgram,jingwei}"; Flags: nowait postinstall skipifsilent; Check: not IsValidationInstall
 
 [Code]
 function IsValidationInstall: Boolean;

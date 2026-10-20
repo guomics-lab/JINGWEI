@@ -5,6 +5,8 @@ Interactive directory/browse checks additionally use the production wizard.
 """
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -23,9 +25,19 @@ pytestmark = pytest.mark.skipif(sys.platform != 'win32' or not ISCC,
 
 
 def run(command, **kwargs):
-    return subprocess.run([str(arg) for arg in command], capture_output=True,
-                          text=True, encoding='utf-8', errors='replace',
-                          timeout=90, **kwargs)
+    arguments = [str(arg) for arg in command]
+    deadline = time.monotonic() + 120
+    while True:
+        try:
+            return subprocess.run(arguments, capture_output=True,
+                                  text=True, encoding='utf-8', errors='replace',
+                                  timeout=90, **kwargs)
+        except OSError as error:
+            # App Control can temporarily deny a just-built unsigned fixture.
+            # Retry the same unchanged file/command only; never alter policy.
+            if error.winerror != 4551 or time.monotonic() >= deadline:
+                raise
+            time.sleep(5)
 
 
 @pytest.fixture(scope='module')
@@ -174,3 +186,67 @@ def test_production_manifest_rejects_non_github_urls(payload, tmp_path):
     assert result.returncode != 0
     assert 'production payloads must use HTTPS on github.com' in result.stderr
     assert not (tmp_path / 'jingwei-Windows-Setup.exe').exists()
+
+
+def test_complete_offline_exe_installs_without_adjacent_payload(payload, tmp_path):
+    output = tmp_path / 'offline-build'
+    result = run([ISCC, '/DSingleFileInstaller', f'/DSourceDir={payload / "source"}',
+                  f'/DReleaseDir={output}', f'/DAppVersion={__version__}',
+                  APP / 'packaging/windows-installer.iss'])
+    assert result.returncode == 0, result.stdout + result.stderr
+    exe = output / f'jingwei-{__version__}-windows-x86_64-offline.exe'
+    assert exe.is_file() and list(output.iterdir()) == [exe]
+    # Run the EXE alone from another directory, without the build source/BINs.
+    download = tmp_path / '下载 文件夹'
+    download.mkdir()
+    standalone = download / exe.name
+    shutil.copyfile(exe, standalone)
+    target = tmp_path / '用户 自定义安装位置/jingwei'
+    temp = tmp_path / 'installer-temp'
+    temp.mkdir()
+    result = run([standalone, '/JINGWEI-VALIDATION=1', '/VERYSILENT',
+                  '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS',
+                  '/NOCLOSEAPPLICATIONS', f'/DIR={target}', f'/LOG={tmp_path / "offline.log"}'],
+                 env={**os.environ, 'TEMP': str(temp), 'TMP': str(temp)}, cwd=download)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (target / '_internal/fixture.txt').read_text() == 'installed exactly once'
+    assert (target / 'LICENSE.txt').read_bytes() == (APP / 'LICENSE.txt').read_bytes()
+    assert not list(target.glob('unins*'))
+    assert not (target / '.jingwei-installer-cache').exists()
+    assert not list(download.glob('*.bin'))
+    log = (tmp_path / 'offline.log').read_text(encoding='utf-8-sig')
+    assert str(target) in log and 'Downloading' not in log
+
+
+def test_optional_online_payload_uses_selected_destination_volume(payload, server, tmp_path):
+    url, requests = server
+    exe = bootstrap(payload, tmp_path / 'build', url)
+    target = tmp_path / 'selected drive 用户/jingwei'
+    target.parent.mkdir()
+    result = run([exe, '/JINGWEI-VALIDATION=1', '/VERYSILENT', '/SUPPRESSMSGBOXES',
+                  '/NORESTART', '/NOICONS', f'/DIR={target}', f'/LOG={tmp_path / "online.log"}'])
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (target / '_internal/fixture.txt').is_file()
+    assert not (target / '.jingwei-installer-cache').exists()
+    assert len(requests) > 0
+    log = (tmp_path / 'online.log').read_text(encoding='utf-8-sig')
+    assert str(target / '.jingwei-installer-cache') in log
+
+
+def test_builder_defaults_to_complete_offline_exe(payload, tmp_path):
+    source = tmp_path / 'source'
+    shutil.copytree(payload / 'source', source)
+    (source / 'build-info.json').write_text(json.dumps({'app_version': __version__}))
+    output = tmp_path / 'release'
+    result = run([sys.executable, APP / 'packaging/build_installer.py', '--iscc', ISCC,
+                  '--source', source, '--output', output])
+    assert result.returncode == 0, result.stdout + result.stderr
+    manifest = json.loads((output / 'windows-offline-installer.json').read_text())
+    exe = output / manifest['installer']
+    assert exe.is_file() and exe.name.endswith('-offline.exe')
+    assert not list(output.glob('*.bin'))
+    assert manifest['offline'] and not manifest['payload_downloads']
+    assert manifest['destination_editable'] and manifest['destination_browse']
+    assert manifest['sha256'] == hashlib.sha256(exe.read_bytes()).hexdigest()
+    assert manifest['size'] == exe.stat().st_size
+    assert manifest['installed_size'] == sum(p.stat().st_size for p in source.rglob('*') if p.is_file())

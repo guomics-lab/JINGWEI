@@ -1,8 +1,12 @@
 # jingwei 1.0.7
 
-Windows 运行 `jingwei-Windows-Setup.exe`，在同一向导中接受纯文本许可、浏览或修改安装位置、下载并安装。Python、PyTorch、R 及各方法依赖均已打包，无需自行安装。离线安装须将 setup.exe 和两个 .bin 文件放在同一文件夹。Linux 下载四个 .tar.part 文件及 `install-linux.sh`，运行脚本安装。
+Windows 下载完整离线安装包 [`jingwei-1.0.7-windows-x86_64-offline.exe`](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-1.0.7-windows-x86_64-offline.exe)，直接运行，在向导中接受纯文本许可，点击 **浏览** 选择安装位置后安装。可在浏览器下载时选择 EXE 的保存位置。全部 Python、PyTorch CPU/CUDA、R 及方法依赖均在这个 EXE 中，安装不再联网下载，也不需要旁边的 .bin 文件或 C 盘的大容量下载缓存。Linux 安装方式不变。
 
-Run `jingwei-Windows-Setup.exe` for one installation wizard with an editable destination and Browse. Python, PyTorch, R and method dependencies are bundled. The offline Windows setup.exe needs its two adjacent .bin files. Linux installation uses all four archive parts and `install-linux.sh`.
+Download and run `jingwei-1.0.7-windows-x86_64-offline.exe`. Accept the plain-text license, then use **Browse** to choose the installation folder. Your browser can save the EXE on any selected drive. The one EXE includes Python, PyTorch CPU/CUDA, R and every method dependency. Installation is offline, needs no adjacent BINs and does not stage a large payload in the C-drive download cache. Linux installation still uses all four archive parts and `install-linux.sh`.
+
+可选在线安装器 `jingwei-1.0.7-windows-x86_64-online.exe` 的暂存目录也已改到用户选择的安装盘，成功后清理。请使用上方完整离线安装包作为默认入口。此次仅调整 Windows 安装方式，软件计算实现和 1.0.7 的结果不变。
+
+The optional `jingwei-1.0.7-windows-x86_64-online.exe` stages downloads on the selected installation volume and removes them after success. Prefer the complete offline EXE above. This update changes Windows packaging only; the 1.0.7 computation and results are unchanged.
 
 ## 训练 / Training
 

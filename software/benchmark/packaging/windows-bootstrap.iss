@@ -1,6 +1,9 @@
 #ifndef AppVersion
   #error AppVersion is required
 #endif
+#ifndef BootstrapFileName
+  #define BootstrapFileName "jingwei-Windows-Setup"
+#endif
 
 [Setup]
 AppId=JINGWEI.Benchmark.Download
@@ -30,7 +33,7 @@ LicenseFile={#AppLicense}
 ExtraDiskSpaceRequired={#InstalledSize}
 CloseApplications=no
 OutputDir={#ReleaseDir}
-OutputBaseFilename=jingwei-Windows-Setup
+OutputBaseFilename={#BootstrapFileName}
 VersionInfoVersion={#AppVersion}
 VersionInfoDescription=jingwei Windows Installer
 
@@ -93,7 +96,9 @@ function DownloadCache(Param: String): String;
 begin
   Result := ExpandConstant('{param:CACHE|}');
   if Result = '' then
-    Result := ExpandConstant('{localappdata}\JINGWEI\Benchmark\Downloads\{#AppVersion}');
+    { The optional online installer stages its payload on the selected
+      installation volume, never in a multi-GB C-drive user cache. }
+    Result := AddBackslash(WizardDirValue) + '.jingwei-installer-cache\{#AppVersion}';
 end;
 
 function NeedDownload(Name, SHA256: String): Boolean;
@@ -160,6 +165,9 @@ begin
       if Code <> 0 then
         RaiseException(FmtMessage(CustomMessage('InstallFailed'), [IntToStr(Code)]));
       DeletePayload;
+      RemoveDir(DownloadCache(''));
+      if ExpandConstant('{param:CACHE|}') = '' then
+        RemoveDir(AddBackslash(WizardDirValue) + '.jingwei-installer-cache');
     finally
       WizardForm.ProgressGauge.Style := npbstNormal;
       WizardForm.CancelButton.Enabled := True;

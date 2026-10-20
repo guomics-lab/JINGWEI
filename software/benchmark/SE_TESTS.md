@@ -1,5 +1,36 @@
 # Software verification
 
+## 1.0.7 complete Windows offline installer — 2026-10-20
+
+The primary Windows download is now one complete offline EXE. The directory
+page remains editable with Browse, including upgrades. No adjacent BINs or
+installation-time payload downloads are required. The optional online installer
+stages downloads on the selected installation volume and cleans them on success.
+
+The actual release EXE installed successfully into a fresh D-drive folder with
+Chinese characters and spaces. All 21,330 installed files matched the validated
+source by SHA-256. Setup's temporary working files peaked at 4,396,032 bytes;
+the previous C-drive download cache, user installation, registry and shortcuts
+were unchanged during isolated validation. Nine installer/packaging tests passed,
+including missing downloads, failed child installation and corrupt retry cache.
+
+The installed application passed hidden native Windows GUI cold/warm runs in
+Chinese and English, CPU/R smoke tests and CUDA DMF/DCAE smoke tests. The warm
+launch reused the environment cache with zero probes and became ready in 2.03 s.
+All 35 CPU methods and all five CUDA neural methods completed with the compact
+runtime. Sparse H5AD input also passed. No host Conda dependencies were available
+to these frozen-process checks.
+
+All 57 first-party module code objects and 38 Torch/CUDA library files match the
+previous 1.0.7 bundle. Packaging excludes the unused optional Polars backend and
+134 R PDF manuals, retaining legal notices and method runtime/data files. Default
+500-epoch Alzheimer DMF/DCAE regression tests returned MSE 0.578734 / 0.631094;
+the reported scientific results and published Python package are unchanged.
+
+Local evidence: `results/offline-installer-20261020/`. The release includes
+`windows-offline-installer.json`, `windows-offline-validation.json` and separate
+checksums; previous release assets remain immutable.
+
 ## 1.0.7 fixed 500 epochs and revised DMF — 2026-10-20
 
 The full Alzheimer input and common MNAR v2 test mask are unchanged: 255,165

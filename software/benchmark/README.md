@@ -16,14 +16,16 @@ runs on CPU. GPU execution requires the machine's NVIDIA driver.
 
 ## Windows
 
-Download and run the [Windows installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-Windows-Setup.exe).
-It automatically downloads and verifies the complete application. Install once,
-then open **Start → jingwei**. No manual BIN downloads are required.
+Download the complete [Windows offline installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-1.0.7-windows-x86_64-offline.exe).
+Run it and click **Browse** to select the installation folder, including another
+drive. All CPU/CUDA, Python and R components are inside this one file; installation
+needs no network connection or adjacent BIN files. You can choose where to save
+the EXE in your browser before downloading. Then open **Start → jingwei**.
 See the [installation guide](RELEASE-1.0.7.md).
 The GUI uses the original JINGWEI bird for the
 application, window and Windows taskbar.
 
-Version 1.0.5 names the application **jingwei**. Its main Run settings have
+The application is named **jingwei**. Its main Run settings have
 only **Task**, **Missingness** and **Mask rate**. Choose data, methods and an
 output folder, then **Run**. Device and model parameters are under **Advanced**.
 Each GUI task runs once; there are no protocol, repeat, training-mask or seed
@@ -51,9 +53,12 @@ checks again. The installer presents a plain-text `LICENSE.txt`.
 ### Masking and result records
 
 A benchmark constructs **one shared test mask**. Every method receives the same
-corrupted dataset, with test truth removed. The platform adds no training mask,
-training/validation split or denoising step. Each method owns its native training,
-validation, corruption and stopping rules.
+corrupted dataset, with test truth removed. DMF/DCAE receive one additional fixed
+training-corruption mask from the remaining observations, using the selected
+mechanism/rate. These hidden training values remain supervised targets; the mask
+is not redrawn each epoch. Other methods use the common input and retain their
+native training procedures. All five neural methods default to exactly 500
+epochs, no early stopping or extra internal validation split, and final weights.
 
 In **Impute**, **Training missingness** and **Training mask rate** construct the
 JINGWEI DMF/DCAE training input. Artificially hidden observations remain available
@@ -61,14 +66,13 @@ as supervised targets. Inference receives the original observations; exports
 preserve them and fill native missing entries. Comparison methods receive the
 original dataset with no JINGWEI training mask. Imputation creates no test mask.
 
-Original-repository MNAR preserves the exact `CSVDataset.get_mask()` formula,
-strict bands and column-major Torch random draws. Its fixed probabilities
-determine the actual rate from the data, so the GUI shows **Auto**. Other
-mechanisms expose a configurable percentage. Mask arrays, seeds and realized
-rates are saved with each run. In benchmark bundles, `training_hidden` is an
-all-false compatibility array; the manifest records mask protocol 3. Imputation
-bundles save the actual JINGWEI training mask and its method scope separately
-from the unchanged common method input.
+**MNAR · JINGWEI** uses within-protein standardized log2 intensities and
+`p = sigmoid(-z + b)`, calibrating `b` to the chosen mask rate. Lower abundance
+means greater missingness probability. The explicit original-repository
+compatibility option retains historical `get_mask()` behavior and is not the
+current AD reference. Mask arrays, seeds and realized rates are saved with each
+run. Protocol 4 stores an unchanged common method input plus a separate JINGWEI
+training-input bundle. Only the latter contains the extra training mask.
 
 Original MNAR may leave a protein with no observations. In that case,
 these columns are removed from comparison-method inputs and excluded from the
@@ -86,7 +90,7 @@ isolated from this reference workflow. See [verification](SE_TESTS.md).
 
 ## Linux and macOS
 
-For Linux V1.0.5, download all parts, its checksums and `install-linux.sh` from
+For Linux V1.0.7, download all parts, its checksums and `install-linux.sh` from
 the [release page](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7).
 Run `sh install-linux.sh`; the command is placed in `~/.local/bin`.
 Custom installation locations are described in the [installation guide](RELEASE-1.0.7.md).

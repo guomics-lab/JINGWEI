@@ -45,10 +45,20 @@ a = Analysis(
     hiddenimports=collect_submodules("jingwei_benchmark") + collect_submodules("pimmslearn") +
                   ["matplotlib.backends.backend_pdf", "matplotlib.backends.backend_svg"],
     hookspath=[], hooksconfig={"matplotlib": {"backends": ["QtAgg", "Agg", "pdf", "svg"]}},
-    excludes=["PyQt5", "PyQt6", "PySide2", "tkinter", "tensorflow", "pytest",
+    # Supported inputs are NumPy/pandas/AnnData; the optional Polars backend
+    # adds a large Rust binary and is not used by any benchmark method.
+    excludes=["polars", "_polars_runtime_32", "_polars_runtime_64", "_polars_runtime_compat",
+              "PyQt5", "PyQt6", "PySide2", "tkinter", "tensorflow", "pytest",
               "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebEngineQuick", "PySide6.QtPdf"],
     noarchive=False,
 )
+# R's PDF manuals are documentation, not imputation inputs. Preserve legal
+# notices and every executable, package database, model/data and help index.
+def is_r_manual(entry):
+    path = Path(entry[0])
+    return (path.parts[0] in (".r-runtime", ".r-library") and path.suffix.lower() == ".pdf"
+            and not any(word in path.name.lower() for word in ("licen", "copy", "notice", "gpl")))
+a.datas = [entry for entry in a.datas if not is_r_manual(entry)]
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="jingwei",
           debug=False, bootloader_ignore_signals=False, strip=False, upx=False,

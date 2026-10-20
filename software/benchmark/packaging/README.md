@@ -59,28 +59,40 @@ Then wrap the complete directory using Inno Setup 6.7.3 (official compiler):
 python software/benchmark/packaging/build_installer.py --iscc "C:\path\to\ISCC.exe"
 ```
 
+The default output is one complete `jingwei-VERSION-windows-x86_64-offline.exe`,
+with no adjacent BIN files or installation-time payload downloads. Inno streams
+the embedded files directly into the selected installation folder. The folder
+page always allows editing and Browse, including upgrades. Strong solid LZMA2
+compression preserves every CPU/CUDA and R component. The builder rejects an EXE
+at or above GitHub's 2 GiB asset limit; `--allow-large-file` is for local outputs
+that cannot be uploaded there.
+
 The per-user installer supports English/Chinese, Start menu/optional desktop
 shortcuts, the original icon and Windows uninstall. It leaves user jobs outside
-the installation directory. EXE and all matching BIN slices must be distributed
-together. Slices stay below GitHub's 2 GiB asset limit. The Chinese translation
+the installation directory. The Chinese translation
 in `languages/` is copied unchanged from jrsoftware/issrc tag `is-6_7_3`,
 `Files/Languages/Unofficial/ChineseSimplified.isl`, retaining its credits.
 
-V1.0.1 adds the primary, single-download Windows installer:
+The older online installer is optional. Build its split payload explicitly:
 
 ```powershell
+python software/benchmark/packaging/build_installer.py --iscc "C:\path\to\ISCC.exe" --split
 python software/benchmark/packaging/build_bootstrap.py --iscc "C:\path\to\ISCC.exe" `
-  --payload "software/benchmark/dist/releases/v1.0.6" `
+  --payload "software/benchmark/dist/releases/v1.0.7" `
   --icon "software/benchmark/dist/windows-x86_64/jingwei/jingwei.ico"
 ```
 
-Build the offline payload first. The bootstrap includes immutable GitHub asset
+The split EXE and all BIN slices remain below GitHub's asset limit and must be
+kept together if used directly. The online bootstrap includes immutable GitHub asset
 URLs, exact sizes and SHA-256 hashes. Inno Setup downloads and verifies those
 files, then invokes the same offline setup silently within one visible wizard;
 the wizard always offers an editable destination with Browse, including upgrades.
 Only the offline payload registers the app
-and its uninstaller. Verified payload files are cached for retries and removed
-after a successful installation. `windows-installer-manifest.json` records the
+and its uninstaller. Downloads are staged in
+`<selected installation folder>/.jingwei-installer-cache/VERSION`, so an install
+on D: does not require a multi-GB C: download cache. Verified files remain for
+retry on failure and are removed after success. `/CACHE=` explicitly overrides
+that location for maintainer fixtures. `windows-installer-manifest.json` records the
 exact payload. A loopback-only `--test-server` mode is for negative fixtures;
 its manifest is marked `test_only` and must never be published.
 
@@ -103,7 +115,7 @@ Windows validation now runs two separate frozen GUI processes against one
 workspace and asserts that the second restores the configuration and launches
 zero environment probes. Test upgrading V1.0 to V1.0.1 and confirm that jobs
 survive with exactly one application uninstall entry. Validate the public
-bootstrap download before promoting the release to latest.
+installer download before promoting the release to latest.
 
 ## Linux/macOS CLI
 

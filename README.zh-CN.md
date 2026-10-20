@@ -23,11 +23,11 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-Windows-Setup.exe"><strong>下载 Windows 软件安装包（.exe）</strong></a> ·
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-1.0.7-windows-x86_64-offline.exe"><strong>下载 Windows 软件安装包（.exe）</strong></a> ·
   <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7">Linux CLI</a>
 </p>
 
-只需下载一个 EXE 并运行，其余文件由安装程序自动获取。安装后从 **开始菜单 → jingwei** 打开软件。
+下载时可在浏览器选择 EXE 的保存位置。下载完整离线 EXE 后直接运行，点击 **浏览** 选择安装位置；安装过程中无需再次下载文件。安装后从 **开始菜单 → jingwei** 打开软件。
 
 JINGWEI 是一个用于蛋白质组数据缺失值插补的深度学习框架，提供 **DMF（深度矩阵分解）** 和 **DCAE（扩张卷积自编码器）** 两种方法。
 
@@ -36,7 +36,7 @@ JINGWEI 是一个用于蛋白质组数据缺失值插补的深度学习框架，
 | 你的需求 | 使用产品 | 开始使用 |
 | --- | --- | --- |
 | 用 **DMF / DCAE** 处理自己的数据 | JINGWEI Python 包 | [快速开始](#快速开始) · [Python API](#python-api-示例) |
-| 比较 **35 种插补方法** | 独立的 jingwei 软件 | [Windows 安装包](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-Windows-Setup.exe) · [使用指南](software/benchmark/README.md) |
+| 比较 **35 种插补方法** | 独立的 jingwei 软件 | [Windows 安装包](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-1.0.7-windows-x86_64-offline.exe) · [使用指南](software/benchmark/README.md) |
 
 ## 功能
 
@@ -174,7 +174,7 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 ## Benchmark 软件
 
-[**下载 Windows 安装包（.exe）**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-Windows-Setup.exe) · [安装说明](software/benchmark/RELEASE-1.0.7.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7)
+[**下载 Windows 离线安装包（.exe）**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-1.0.7-windows-x86_64-offline.exe) · [安装说明](software/benchmark/RELEASE-1.0.7.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7)
 
 上方链接为 **1.0.7** Windows 安装包，软件名称为 **jingwei**，Python、R 及各方法依赖均已打包。Windows 原生界面支持 **中文 / English**，默认加载内置的 `data/Alzheimer.csv`。
 
