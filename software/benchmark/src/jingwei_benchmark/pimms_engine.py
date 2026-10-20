@@ -108,6 +108,18 @@ def cached_loaders(enabled, *, points, method):
 
 
 def run_pimms(name, matrix, training_hidden, params, *, device, seed, folder):
+    if name in ("pimms-dae", "pimms-vae"):
+        # The upstream scaler/imputer cannot fit a feature whose entire
+        # training column is missing. Do not silently change the shared mask,
+        # borrow validation/test values or let sklearn drop model dimensions.
+        empty = ~(np.isfinite(matrix) & ~training_hidden).any(axis=0)
+        if empty.any():
+            from .methods import MethodInputError
+            raise MethodInputError(
+                f"{name} requires an observed training value in every feature; "
+                f"{int(empty.sum())} features are empty after the second mask. "
+                "The original notebook used a single mask. Both requested masks are preserved."
+            )
     import torch
     from fastai.torch_core import defaults
 
@@ -159,7 +171,8 @@ def run_pimms(name, matrix, training_hidden, params, *, device, seed, folder):
         raise RuntimeError(f"requested {device}, model trained on {actual_device}")
     metadata = {
         "device": device, "actual_device": str(actual_device), "torch_version": torch.__version__,
-        "training_protocol": "fixed second mask supplied as PIMMS internal validation; native model training/corruption; test truths never supplied",
+        "training_protocol": ("model-supplied mask used as PIMMS validation; test truths never supplied" if training_hidden.any()
+                              else "native PIMMS training/corruption on common evaluation-corrupted input; no platform training mask"),
         "pimms_acceleration": acceleration, "fit_s": fitted-started,
         "progress_logging": "epoch" if engine == "optimized" else "native",
         "prediction_s": finished-fitted, "epochs_trained": model.epochs_trained_,

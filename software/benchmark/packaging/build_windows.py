@@ -25,7 +25,7 @@ def main():
         parser.error("build inside the dedicated jingwei_benchmark conda environment")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    if not (APPLICATION / "LICENSE").is_file():
+    if not (APPLICATION / "LICENSE.txt").is_file():
         parser.error("missing benchmark application LICENSE")
     from jingwei_benchmark.methods import availability, find_method_source
     from jingwei_benchmark import __version__
@@ -37,12 +37,12 @@ def main():
     subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--distpath", str(output),
                     "--workpath", str(ROOT / "build/benchmark-windows"), str(BUILD / "windows.spec")],
                    env=env, cwd=ROOT, check=True)
-    artifact = output / "JINGWEI Benchmark/JINGWEI Benchmark.exe"
-    console = output / "JINGWEI Benchmark/jingwei-benchmark.exe"
+    artifact = output / "jingwei/jingwei.exe"
+    console = output / "jingwei/jingwei-cli.exe"
     distribution = artifact.parent
-    for name in ("README.md", "PERFORMANCE.md", "NOTEBOOK_REPLAY.md", "SE_TESTS.md", f"RELEASE-{__version__}.md"):
+    for name in ("README.md", "PERFORMANCE.md", "SE_TESTS.md", "AE_ARCHITECTURE.md", f"RELEASE-{__version__}.md"):
         shutil.copyfile(APPLICATION / name, distribution / name)
-    shutil.copyfile(APPLICATION / "LICENSE", distribution / "LICENSE")
+    shutil.copyfile(APPLICATION / "LICENSE.txt", distribution / "LICENSE.txt")
     for name in ("NAguideR", "DreamAI"):
         source = Path(find_method_source(name))
         for file in source.iterdir():
@@ -55,6 +55,8 @@ def main():
         executable_hash = hashlib.file_digest(handle, "sha256").hexdigest()
     from jingwei_benchmark import __version__
     info = {"app_version": __version__, "platform": sys.platform, "python": sys.version, "versions": versions,
+            "app_name": "jingwei", "desktop_executable": "jingwei.exe", "console_executable": "jingwei-cli.exe",
+            "startup_environment_check": "before-main-window", "run_settings": ["command", "mechanism", "mask_rate"],
             "bundled_windows_r": True,
             "desktop_languages": ["zh", "en"],
             "app_user_model_id": "JINGWEI.Benchmark.Desktop",
@@ -62,7 +64,9 @@ def main():
             "default_jingwei_engine": "torch",
             "default_baseline_engine": "optimized",
             "default_benchmark_methods": "all",
-            "default_benchmark_repeats": 1, "default_gui_protocol": "original-notebook",
+            "default_benchmark_repeats": 1, "default_gui_protocol": "fair",
+            "mask_protocol_version": 3, "platform_mask_count": 1, "training_protocol": "method-owned",
+            "default_dcae_architecture": "global-ae-v1",
             "notebook_source_revision": "98686b54fdb9918a4d4cc9d99ac4880a6dadcefe",
             "default_timeout_s": DEFAULT_TIMEOUT_SECONDS,
             "default_mice_backend": "python-linear-mice-pmm",

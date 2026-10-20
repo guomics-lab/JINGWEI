@@ -32,7 +32,7 @@ def main():
     args = parser.parse_args()
     if sys.platform not in ("linux", "darwin"):
         parser.error("build Linux/macOS CLI releases on their target OS")
-    if not (APPLICATION / "LICENSE").is_file():
+    if not (APPLICATION / "LICENSE.txt").is_file():
         parser.error("missing benchmark application LICENSE")
     prefix = Path(sys.prefix)
     if prefix.name != "jingwei_benchmark" or not (prefix / "conda-meta").is_dir():
@@ -113,9 +113,9 @@ def main():
     executable.write_text(launcher, encoding="utf-8", newline="\n")
     executable.chmod(0o755)
     shutil.copyfile(BUILD / "fix_r_runtime.py", output / "fix_r_runtime.py")
-    for name in ("README.md", "PERFORMANCE.md", "NOTEBOOK_REPLAY.md", "SE_TESTS.md", f"RELEASE-{__version__}.md"):
+    for name in ("README.md", "PERFORMANCE.md", "SE_TESTS.md", f"RELEASE-{__version__}.md"):
         shutil.copyfile(APPLICATION / name, output / name)
-    shutil.copyfile(APPLICATION / "LICENSE", output / "LICENSE")
+    shutil.copyfile(APPLICATION / "LICENSE.txt", output / "LICENSE.txt")
     versions = {name: metadata.version(name) for name in ("torch", "fastai", "pimms-learn", "scikit-learn", "numpy", "scipy", "pandas", "anndata")}
     r_version = subprocess.run([str(rscript), "--version"], capture_output=True, text=True, check=True)
     from jingwei_benchmark import __version__

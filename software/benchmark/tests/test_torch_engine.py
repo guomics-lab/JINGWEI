@@ -61,7 +61,7 @@ def test_dense_mask_loss_and_adamw_step_match_native_training_step(method, weigh
         native_loss = reference.training_step((*batch, indices) if method == "dmf" else batch, 0)
     native_loss.backward()
     torch.manual_seed(9)
-    output, logits = (optimized(batch[0], row_indices=indices) if method == "dmf" else optimized(batch[0]))
+    output, logits = (optimized(batch[0], row_indices=indices) if method == "dmf" else optimized(batch[0], input_mask))
     loss = masked_loss(output, logits, target, input_mask, supervision, weight)
     loss.backward()
     torch.testing.assert_close(loss, native_loss, rtol=2e-6, atol=2e-6)

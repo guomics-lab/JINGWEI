@@ -47,7 +47,7 @@ def test_reopen_restores_form_and_skips_environment_probe(tmp_path, monkeypatch)
     until(app, lambda: first.preview_data is not None and bool(first.backend_states))
     first.set_language("en")
     first.select_methods(["mean", "knn"])
-    for key, setting in {"device": "cpu", "mask_rate": .15, "seed": 91, "hidden_dims": "32, 16"}.items():
+    for key, setting in {"device": "cpu", "mask_rate": .15, "hidden_dims": "32, 16"}.items():
         set_value(first.fields[key], setting)
     first.job_name.setText("Remember this run")
     first.method_parameters = {"knn": {"k": 3}}
@@ -91,7 +91,7 @@ def test_late_environment_probe_cannot_replace_new_settings(tmp_path, monkeypatc
     window.close()
 
 
-def test_protocol_switch_reuses_environment_and_restores_backend_availability(tmp_path, monkeypatch):
+def test_task_switch_reuses_environment_without_changing_backends(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
     import jingwei_benchmark.gui_environment as environment
     calls = []
@@ -103,15 +103,30 @@ def test_protocol_switch_reuses_environment_and_restores_backend_availability(tm
     monkeypatch.setattr(environment, 'inspect_environment', probe)
     window = BenchmarkWindow(tmp_path, load_default=False)
     until(app, lambda: bool(window.backend_states))
-    assert window.backend_states['missforest']['available']
-    assert window.backend_states['missforest']['backend'] == 'python'
-    window.fields['evaluation_protocol'].setCurrentIndex(window.fields['evaluation_protocol'].findData('fair'))
-    assert not window.backend_states['missforest']['available']
-    assert window.backend_states['missforest']['backend'] == 'r'
-    window.fields['evaluation_protocol'].setCurrentIndex(window.fields['evaluation_protocol'].findData('original-notebook'))
-    assert window.backend_states['missforest']['available']
+    for command in ('impute','benchmark'):
+        window.fields['command'].setCurrentIndex(window.fields['command'].findData(command))
+        assert not window.backend_states['missforest']['available']
+        assert window.backend_states['missforest']['backend'] == 'r'
     assert len(calls) == 1 and window._environment_probe_count == 1
     window.close()
+
+
+def test_old_protocol_seed_and_training_controls_cannot_restore(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(BenchmarkWindow, 'refresh_environment', lambda self: None)
+    write_json(tmp_path/'session.json', {'schema': 1, 'fields': {'evaluation_protocol': 'original-notebook', 'seed':91,'training_mask_rate':.8}})
+    window=BenchmarkWindow(tmp_path, load_default=False)
+    assert not {'evaluation_protocol','seed','training_mask_rate','training_mechanism'} & window.fields.keys()
+    window.backend_states=states()
+    assert window.configuration()['evaluation_protocol']=='fair'
+    assert window.configuration()['seed']==0
+    assert not {'training_mask_rate','training_mechanism'} & window.configuration().keys()
+    assert window.selected_job is None and 'repeats' not in window.fields
+    window.close()
+    reopened=BenchmarkWindow(tmp_path, load_default=False)
+    assert 'evaluation_protocol' not in reopened.fields
+    assert reopened.selected_job is None
+    reopened.close()
 
 
 def test_missing_saved_input_and_invalid_fields_do_not_reset_to_demo(tmp_path, monkeypatch):
@@ -126,6 +141,34 @@ def test_missing_saved_input_and_invalid_fields_do_not_reset_to_demo(tmp_path, m
     assert not window.start_button.isEnabled()
     assert "repeats" not in window.fields
     window.close()
+
+
+@pytest.mark.parametrize('saved', [10**500,10**12,-10**500])
+def test_oversized_saved_numeric_field_cannot_crash_startup(tmp_path, monkeypatch, saved):
+    app=QApplication.instance() or QApplication([])
+    monkeypatch.setattr(BenchmarkWindow,'refresh_environment',lambda self:None)
+    write_json(tmp_path/'session.json',{'schema':1,'fields':{'max_epochs':saved}})
+    window=BenchmarkWindow(tmp_path,load_default=False)
+    try:
+        field=window.fields['max_epochs']
+        assert field.value()==(field.maximum() if saved>0 else field.minimum())
+    finally:window.close()
+
+
+def test_small_saved_mask_rate_and_bad_method_override_are_restored_safely(tmp_path, monkeypatch):
+    app=QApplication.instance() or QApplication([])
+    from jingwei_benchmark.gui import ParameterDialog
+    monkeypatch.setattr(BenchmarkWindow,'refresh_environment',lambda self:None)
+    write_json(tmp_path/'session.json',{'schema':1,'fields':{'mask_rate':.0001},
+        'parameters':{'knn':{'k':'broken'},'jingwei-dcae':{'latent_dim':10**500,'ae_dropout':.2}}})
+    window=BenchmarkWindow(tmp_path,load_default=False)
+    try:
+        assert window.fields['mask_rate'].value()==pytest.approx(.0001)
+        assert window.method_parameters=={'knn':{},'jingwei-dcae':{'ae_dropout':.2}}
+        dialog=ParameterDialog('knn',{'k':'broken'},window)
+        assert dialog.values()['k']==5
+        dialog.close()
+    finally:window.close()
 
 
 def test_startup_does_not_open_legacy_job_or_restore_its_parameters(tmp_path, monkeypatch):

@@ -62,7 +62,6 @@ def test_native_window_load_run_plot_and_restore(app, tmp_path):
     window.show()
     errors = []
     window.show_error = errors.append
-    set_value(window.fields["evaluation_protocol"], "fair")
     window.mode_changed()
     window.load_demo()
     until(app, lambda: window.preview_data is not None and bool(window.backend_states))
@@ -154,8 +153,8 @@ def test_gui_starts_with_alzheimer_data(app, tmp_path, monkeypatch):
     window = BenchmarkWindow(tmp_path)
     until(app, lambda: window.preview_data is not None)
     assert Path(window.input_path.text()) == default_input_path()
-    assert (window.preview_data["samples"], window.preview_data["features"]) == (210, 1541)
-    assert value(window.fields["evaluation_protocol"]) == "original-notebook"
+    assert (window.preview_data["samples"], window.preview_data["features"]) == (210, 1542)
+    assert "evaluation_protocol" not in window.fields
     assert "repeats" not in window.fields
     assert window.preview_data["working_scale"] == "log2"
     window.set_language("en")

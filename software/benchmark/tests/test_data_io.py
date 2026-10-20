@@ -4,6 +4,21 @@ import pytest
 from jingwei_benchmark.data_io import load_matrix, write_predictions
 
 
+def test_explicitly_excluded_features_remain_missing_and_do_not_hide_other_failures(tmp_path):
+    source = tmp_path / "scope.csv"
+    pd.DataFrame([[2., 3.], [4., 5.]], columns=["P0", "P1"]).to_csv(source, index=False)
+    data = load_matrix(source, transform="none")
+    values = np.array([[2., np.nan], [4., np.nan]])
+    write_predictions(data, values, tmp_path, method="mean", input_scale="raw",
+                      excluded_features=np.array([False, True]))
+    exported = pd.read_csv(tmp_path / "imputed.csv", index_col=0).to_numpy()
+    assert np.isnan(exported[:, 1]).all()
+    values[0, 0] = np.nan
+    with pytest.raises(ValueError, match="nonfinite predictions"):
+        write_predictions(data, values, tmp_path, method="mean", input_scale="raw",
+                          excluded_features=np.array([False, True]))
+
+
 def test_csv_without_identifier_column_keeps_first_feature(tmp_path):
     source = tmp_path / "input.csv"
     pd.DataFrame([[1.0, 2.0], [3.0, 4.0]], columns=["P1", "P2"]).to_csv(

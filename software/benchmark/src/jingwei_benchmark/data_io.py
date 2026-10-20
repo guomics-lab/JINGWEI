@@ -104,6 +104,8 @@ def load_matrix(
 
         adata = ad.read_h5ad(path)
         matrix = adata.X if layer is None else adata.layers[layer]
+        if matrix is None:
+            raise ValueError("AnnData has no expression matrix in X; select a numeric layer with --layer")
         if np.prod(matrix.shape) * 8 > max_dense_mb * 1024**2:
             raise ValueError("matrix exceeds --max-dense-mb")
         matrix = matrix.toarray() if hasattr(matrix, "toarray") else np.asarray(matrix)
@@ -177,14 +179,23 @@ def load_matrix(
 
 
 def write_predictions(
-    data, values, folder, *, method, input_scale, output_scale="input", allow_nonfinite=False
+    data, values, folder, *, method, input_scale, output_scale="input", allow_nonfinite=False,
+    excluded_features=None,
 ):
     folder = Path(folder)
     output_values = np.asarray(values, dtype=float).copy()
     if output_scale == "input" and input_scale == "raw" and data.scale == "log2":
         with np.errstate(over="ignore", invalid="ignore"):
             output_values = np.exp2(output_values)
-    if not allow_nonfinite and not np.isfinite(output_values).all():
+    checked = output_values
+    if excluded_features is not None:
+        excluded = np.asarray(excluded_features)
+        if excluded.dtype != np.bool_ or excluded.shape != (output_values.shape[1],):
+            raise ValueError("excluded_features must be a boolean feature mask")
+        if not np.isnan(output_values[:, excluded]).all():
+            raise ValueError("excluded features must remain missing in exports")
+        checked = output_values[:, ~excluded]
+    if not allow_nonfinite and not np.isfinite(checked).all():
         raise ValueError("nonfinite predictions on output scale")
     csv_temporary = folder / "imputed.csv.tmp"
     pd.DataFrame(

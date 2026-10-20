@@ -1,6 +1,10 @@
 """Small, explicit desktop message catalog; method IDs and saved data stay stable."""
 
 MESSAGES = {
+    "掩蔽比例": "Mask rate",
+    "此机制使用固定概率，掩蔽比例由数据决定。": "This mechanism uses fixed probabilities; the realized mask rate depends on the data.",
+    "计算环境检查失败": "Environment check failed",
+    "Dropout": "Dropout",
     "全局 AE": "Global AE",
     "AE 架构": "AE architecture", "全局 AE Dropout": "Global AE dropout",
     "原始卷积 AE": "Original convolutional AE", "全局掩码 AE（实验）": "Global mask-aware AE (experimental)",
@@ -21,6 +25,9 @@ MESSAGES = {
     "每次运行会在所选目录创建独立的任务文件夹。": "Each run creates a separate task folder inside this output folder.",
     "尚未打开任务": "No task open", "打开任务…": "Open task…", "打开任务目录": "Open task folder",
     "任务配置无效": "Invalid task configuration", "请选择包含 request.json 或 manifest.json 的任务目录": "Choose a task folder containing request.json or manifest.json",
+    "任务结果记录无效": "Invalid task result record",
+    "任务结果指标无效": "Invalid task result metric",
+    "任务完成记录无效": "Invalid task completion record",
     "只能停止当前窗口启动的任务": "Only tasks started by this window can be stopped",
     "任务标识与当前运行的任务冲突": "Task identifier conflicts with a running task",
     "请先完成或停止当前任务": "Complete or stop the current task first", "正在启动计算进程…": "Starting the computation process…",

@@ -59,7 +59,7 @@ def parser():
         p.add_argument("--transform", choices=("auto", "none", "log2"), default="auto")
         p.add_argument("--max-dense-mb", type=int, default=2048)
         p.add_argument("--evaluation-protocol", choices=PROTOCOLS, default="fair",
-                       help="fair: shared evaluation then training mask; original-notebook: historical raw-CSV preprocessing, single mask and scoring")
+                       help="fair: one shared evaluation mask and method-owned training; original-notebook: historical raw-CSV preprocessing and scoring")
         if command == "inspect":
             continue
         p.add_argument("--output", type=Path, required=True)
@@ -83,9 +83,7 @@ def parser():
         add_device_arguments(p)
         p.add_argument("--mechanism", choices=MECHANISMS, default="mcar",
                        help="mnar-jingwei-original replays historical CSVDataset.get_mask on working-scale data; mnar-jingwei retains the older custom quantile rule")
-        p.add_argument("--training-mechanism", choices=MECHANISMS)
         p.add_argument("--mask-rate", type=float, default=0.2)
-        p.add_argument("--training-mask-rate", type=float, default=0.2)
         p.add_argument(
             "--paper-probabilities", "--uncalibrated-mnar",
             action="store_true",
@@ -112,7 +110,7 @@ def parser():
                        help="maximum seconds per method/repeat (default: 1800; 30 min)")
         p.add_argument("--max-epochs", type=int, default=50)
         p.add_argument("--jingwei-preset", choices=("standard", "original-benchmark"), default="standard",
-                       help="original-benchmark restores original JINGWEI model/training settings; overrides common training flags; --method-config takes precedence")
+                       help="original-benchmark restores original JINGWEI training settings; --method-config takes precedence")
         p.add_argument("--training-engine", choices=("torch", "lightning"), default="torch",
                        help="JINGWEI native PyTorch execution, or original Lightning runner for comparison")
         p.add_argument("--batch-size", type=int, default=64)
@@ -120,8 +118,8 @@ def parser():
         p.add_argument("--hidden-dims", nargs="+", type=int, default=[256, 128])
         p.add_argument("--learning-rate", type=float, default=0.001)
         p.add_argument("--mask-weight", type=float, default=0.5)
-        p.add_argument("--ae-architecture", choices=("native", "global"), default="native",
-                       help="DCAE architecture: original convolutional AE, or experimental mask-aware global AE")
+        p.add_argument("--ae-architecture", choices=("native", "global"), default=None,
+                       help="DCAE uses its current global decoder; native explicitly selects the legacy AE. Historical notebook replay always retains its original implementation")
         p.add_argument(
             "--w2-features",
             nargs="+",

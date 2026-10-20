@@ -46,7 +46,7 @@ def application_icon():
 def apply_application_icon(app, window=None):
     icon = application_icon()
     from . import __version__
-    app.setApplicationName("JINGWEI Benchmark")
+    app.setApplicationName("jingwei")
     app.setApplicationVersion(__version__)
     app.setOrganizationName("JINGWEI")
     app.setWindowIcon(icon)

@@ -1,5 +1,7 @@
 """Typed, no-code controls for the parameters used by CLI method adapters."""
 
+import math
+
 # name: (label, default, lower, upper); list values use comma-separated positive dimensions.
 NEURAL = {
     "max_epochs": ("训练轮数", 50, 1, 100000),
@@ -33,8 +35,7 @@ PARAMETERS["mice-pmm"].update({"donors": ("PMM 候选供体数", 5, 1, 10000),
 for name in ("jingwei-dmf", "jingwei-dcae", "pimms-dae", "pimms-vae", "pimms-cf"):
     PARAMETERS[name] = dict(NEURAL)
 PARAMETERS["jingwei-dcae"].update({
-    "ae_architecture": ("AE 架构", "native", None, None),
-    "ae_dropout": ("全局 AE Dropout", .1, 0., .99),
+    "ae_dropout": ("Dropout", .1, 0., .99),
     "mask_predictor_hidden_dim": ("掩蔽预测器维度", 256, 1, 100000),
     "encoder_blocks": ("编码块数量", 2, 1, 32),
     "decoder_blocks": ("解码块数量", 2, 1, 32),
@@ -45,6 +46,27 @@ for name in ("pimms-dae", "pimms-vae", "pimms-cf"):
     PARAMETERS[name].pop("learning_rate")
     PARAMETERS[name].pop("mask_weight")
 PARAMETERS["pimms-cf"].pop("hidden_dims")
+
+
+def valid_overrides(name, settings):
+    """Ignore malformed saved overrides before passing them to Qt controls."""
+    if not isinstance(settings, dict):
+        return {}
+    result = {}
+    for key, setting in settings.items():
+        if key not in PARAMETERS.get(name, {}):
+            continue
+        _, default, low, high = PARAMETERS[name][key]
+        if isinstance(default, list):
+            valid = isinstance(setting, list) and bool(setting) and all(
+                type(item) is int and 0 < item <= 2147483647 for item in setting)
+        elif type(default) is int:
+            valid = type(setting) is int and low <= setting <= high
+        else:
+            valid = type(setting) in (int, float) and low <= setting <= high and math.isfinite(setting)
+        if valid:
+            result[key] = setting
+    return result
 
 LABELS = {"zero": "零值", "minimum": "全局最小值", "feature-minimum": "蛋白最小值",
           "mean": "蛋白均值", "median": "蛋白中位数", "sample-median": "样本中位数",

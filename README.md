@@ -114,6 +114,13 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 ### Available Parameters
 
+The source checkout uses the updated **DCAE implementation** with an explicit
+input mask, global bottleneck and dense decoder. See the
+[implementation guide](software/benchmark/AE_ARCHITECTURE.md) for its Python API
+and the Alzheimer evaluation. Only Alzheimer result values have been updated;
+other datasets await reevaluation. The Windows 1.0.4 build includes this updated
+DCAE; the published Python package and earlier installers are unchanged.
+
 <details>
 <summary>Expand all training parameters</summary>
 
@@ -172,34 +179,29 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 [**Download Windows installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe) · [Installation](software/benchmark/RELEASE-1.0.3.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.3)
 
-Install once and open **JINGWEI Benchmark** from the Start menu. Python, R,
-conda and method dependencies are bundled. The native Windows GUI supports
-**中文 / English** and loads the bundled `data/Alzheimer.csv` by default.
+The download above is the published **1.0.3** installer. The local **1.0.5**
+build is named **jingwei** and bundles Python, R and method dependencies. Its
+native Windows GUI supports **中文 / English** and includes `data/Alzheimer.csv`.
 
-Choose data, methods, a protocol, output folder and device, then **Run**. GUI
-tasks run **once**; the repeat control has been removed. **Log** shows live
-progress. Startup leaves results empty; **Open task…** opens a saved task.
-Form preferences and the environment cache persist independently of results.
+Choose data, methods and an output folder. Run settings contain only **Task**,
+**Missingness** and **Mask rate**; device and model settings are in **Advanced**.
+Each GUI task runs once. **Log** shows live progress; **Open task…** opens saved
+results. Startup leaves results empty and completes environment checks before
+showing the main window. Valid cached checks and form preferences are reused.
+The installer license is plain text.
 
-- **Original notebook replay** restores the old raw-CSV preprocessing,
-  `CSVDataset.get_mask()`, single mask, original methods and scoring. It
-  unconditionally discards the first column and uses pre-mask statistics.
-- **Fair benchmark** supports regular CSV/AnnData input, shared evaluation
-  masking followed by training masking, and normalization without evaluation
-  truth. The old custom quantile mechanism is labeled separately.
-
-New forms default to notebook replay; existing preferences keep their protocol.
-Historical scores are **not all reproduced** by restoring the source
-alone. Mask counts and deterministic scores are checked against the archived
-Alzheimer output; neural methods are also compared with direct execution of
-the old functions. Read the [replay protocol](software/benchmark/NOTEBOOK_REPLAY.md)
-and [verification report](software/benchmark/SE_TESTS.md) for results and limits.
+One test mask is shared across all methods. Every method receives the same
+corrupted dataset and owns its training/validation procedure; the platform adds
+no training mask. Original-repository MNAR follows
+`CSVDataset.get_mask()` and shows **Auto**, since fixed probabilities determine
+the realized rate. Current GUI task exports are the reference for the updated
+Alzheimer results; obsolete notebook result records have been removed.
+See the [verification report](software/benchmark/SE_TESTS.md).
 
 The CLI defaults to **all 35 methods, one evaluation**, with a **30-minute
 timeout per method**. Explicit CLI repeats remain available for fair evaluations.
-The default GUI selection is DMF/DCAE. Historical replay uses the original
-linear Python MICE; fair evaluation also offers Python/R MICE-PMM and the
-other R baselines. [User guide](software/benchmark/README.md).
+The default GUI selection is DMF/DCAE. Python/R MICE-PMM and the other R
+baselines are available in the method list. [User guide](software/benchmark/README.md).
 
 | Platform | Application | Compute |
 | --- | --- | --- |

@@ -1,4 +1,4 @@
-# JINGWEI Benchmark
+# jingwei
 
 Standalone software for comparing JINGWEI DMF/DCAE with PIMMS and traditional
 proteomics imputation methods. This application is separate from the published
@@ -18,64 +18,60 @@ runs on CPU. GPU execution requires the machine's NVIDIA driver.
 
 Download and run the [Windows installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe).
 It automatically downloads and verifies the complete application. Install once,
-then open **Start → JINGWEI Benchmark**. No manual BIN downloads are required.
+then open **Start → JINGWEI Benchmark** (the published 1.0.3 installer). No manual BIN downloads are required.
 See the [installation guide](RELEASE-1.0.3.md).
 The GUI uses the original JINGWEI bird for the
 application, window and Windows taskbar.
 
-The compact workbench keeps data, methods and run settings on the left, with
-**Results / Plot / Log** tabs on the right. JINGWEI DMF and DCAE are selected by
-default. The bundled `data/Alzheimer.csv` is loaded on startup; **Example**
-returns to this dataset. Choose CSV/h5ad data, confirm its input scale, select methods, masking,
-a protocol and device, then click **Run**. GUI tasks run once; there is no repeat control. Run and Stop stay visible.
+Version 1.0.5 names the application **jingwei**. Its main Run settings have
+only **Task**, **Missingness** and **Mask rate**. Choose data, methods and an
+output folder, then **Run**. Device and model parameters are under **Advanced**.
+Each GUI task runs once; there are no protocol, repeat, training-mask or seed
+controls. DMF/DCAE are selected by default and `data/Alzheimer.csv` is bundled.
 
-Use **中文 / English** at the top right to switch languages immediately; the
-choice is remembered and switching keeps the current configuration and job.
-**Preview** shows the detected header/ID and a small matrix preview. Numeric IDs
-or numeric headers can be specified in **Import settings**. **Advanced** contains
-shared training settings, the second training mask, MNAR controls and W2 protein
-selection. **Runtime** shows method availability and optional backend paths.
-Each method's **Parameters** button overrides shared training settings.
+Switch **中文 / English** at the top right. **Preview** shows the detected
+header/ID and matrix; **Import settings** can override numeric IDs or headers.
+**Runtime** reports method availability. Method-specific **Parameters** override
+shared training settings.
 
-Choose an **Output folder** before running. Each run creates a separate named
-task folder containing its input snapshot, configuration, logs and results.
-**Open task…** opens that folder later, including a moved GUI task folder or a
-CLI output folder. Opening saved results does not rerun algorithms. Startup
-leaves the result area empty; there is no history list or automatic last-task loading.
-Cancellation, live logs, metrics, paired comparison plots and complete result
-ZIP export are available. The Log tab opens when a run starts and shows task
-progress plus the selected method's output. Plot export includes source CSV
-and provenance JSON. Method IDs and original algorithm logs retain their native
-names across languages.
+Each run creates its own folder beneath the selected **Output folder**. The
+**Log** tab opens at run start and shows live progress and method output.
+**Open task…** opens a saved or moved GUI task, or a CLI output folder. Startup
+leaves results empty. Configuration, output folder and window layout are saved
+independently of results. Cancellation, plots and ZIP export remain available.
 
-The desktop also restores the last data file, method selection, method-specific
-parameters and window layout. It caches the first R/PyTorch environment check;
-reopening does not repeat that probe unless the software, backend paths,
-dependencies or GPU driver change. **Environment → Refresh** checks again.
-Data is still checked when loaded, and workers validate the actual runtime.
-Form preferences and the output folder are remembered independently of results.
+Environment checks complete before the main window opens, with a small startup
+screen supporting cancel and retry. Valid cached checks are reused; changing
+runtime paths, software or drivers invalidates the cache. **Runtime → Refresh**
+checks again. The installer presents a plain-text `LICENSE.txt`.
 
-### Original notebook and fair protocols
+### Masking and result records
 
-**Protocol → Original notebook replay** restores the full historical pipeline,
-including unconditional first-column removal, log2 positives, pre-mask float32
-statistics, the original `get_mask()`, one mask, original adapters and score
-filtering. This is the default for new forms; existing settings retain their
-protocol. Fixed historical settings are disabled in the form. **Fair benchmark**
-retains automatic CSV/AnnData import and sequential evaluation/training masking.
+A benchmark constructs **one shared test mask**. Every method receives the same
+corrupted dataset, with test truth removed. The platform adds no training mask,
+training/validation split or denoising step. Each method owns its native training,
+validation, corruption and stopping rules. Imputation uses the supplied dataset
+directly, without an artificial platform mask.
 
-The [replay guide](NOTEBOOK_REPLAY.md) documents exact rules, method order, random
-streams, full Alzheimer commands and the distinction from the parameter-only
-`original-benchmark` preset. Historical replay's MICE is the original Python
-linear method and its MissForest is the Python script. These are distinct from
-fair mode's PMM/R implementations.
+Original-repository MNAR preserves the exact `CSVDataset.get_mask()` formula,
+strict bands and column-major Torch random draws. Its fixed probabilities
+determine the actual rate from the data, so the GUI shows **Auto**. Other
+mechanisms expose a configurable percentage. Mask arrays, seeds and realized
+rates are saved with each run. `training_hidden` is an all-false compatibility
+array in saved bundles, not a second mask; the manifest records mask protocol 3.
+
+Original MNAR may leave a protein with no observations. In that case,
+these columns are removed from comparison-method inputs and excluded from the
+shared scoring scope. `feature_scope.json` records their IDs and counts;
+metrics include `n_held_out`, `n_evaluated` and `n_excluded`. Exports keep those
+columns as missing, without inventing estimates. Nonfinite predictions on
+retained features remain errors rather than being silently omitted.
 
 MSE, RMSE, MAE, NRMSE, correlations and sample W2 are exported with their scope.
-The old notebook only reported MSE and runtime. Full Alzheimer mask counts and
-deterministic scores match its saved output; not all archived neural scores
-are reproduced. Direct execution of the old functions on the same machine is
-also checked. See [verification](SE_TESTS.md). Never interpret this compatibility
-profile as an exact paper-table reproduction.
+The updated Alzheimer manuscript results use the current GUI task exports,
+including actual model settings, input hash, shared masks and per-method timing.
+Obsolete notebook result records are removed. Old compatibility code remains
+isolated from this reference workflow. See [verification](SE_TESTS.md).
 
 
 ## Linux and macOS
@@ -92,7 +88,7 @@ No macOS binary is included in this release. From the installed application fold
 ./jingwei-benchmark inspect --input data.csv
 ./jingwei-benchmark benchmark --input data.csv \
   --methods jingwei-dmf jingwei-dcae mean knn bpca missforest \
-  --mechanism mnar-jingwei --mask-rate 0.2 --training-mask-rate 0.2 \
+  --mechanism mnar-jingwei --mask-rate 0.2 \
   --repeats 1 --device cpu --output results/my-benchmark
 ```
 
@@ -119,11 +115,11 @@ the current working directory. Explicit `--input` always takes precedence.
 
 ## Execution speed
 
-The development source also provides an optional [global mask-aware AE](AE_ARCHITECTURE.md)
-for DCAE: `--ae-architecture global`, or **DCAE Parameters → AE architecture** in
-the fair-protocol GUI. It adds a global bottleneck and feature-specific decoder.
-The native architecture remains the default and historical replay keeps its
-original model. This option is not included in the V1.0.3 release binaries.
+The development source directly updates [DCAE](AE_ARCHITECTURE.md) with an
+explicit input mask, global bottleneck and dense decoder. Select DCAE as usual;
+there is no extra method or dataset-specific preset. Only Alzheimer result
+values have been updated using current GUI exports; other datasets await
+reevaluation. Previously published release binaries retain their original implementation.
 
 `mice` / `mice-pmm` now defaults to the application's **Python linear MICE-PMM**
 implementation. It uses posterior draws from ridge-regularized linear
@@ -201,10 +197,10 @@ imputation method. `failure_kind=unsupported_input` distinguishes these cases.
 - AnnData: `.h5ad`, X or a selected layer; original obs/var are preserved.
 - Missing encoding and raw/log2 scale are explicit. Zero/negative values are
   valid observations when missing encoding is `nan`.
-- In the fair profile, shared evaluation mask E is generated first. Training mask T is generated
-  only from the remaining observations. Evaluation truths never reach workers.
+- In the current profile, one shared evaluation mask E is generated. Any additional
+  training corruption belongs to the method. Evaluation truths never reach workers.
   Repeated runs record the seed, masks, parameters and dependency versions.
-- Fair mechanisms: MCAR, custom logistic/threshold/quantile MNAR, and the historical JINGWEI threshold kernel. The complete notebook profile is separate.
+- Mechanisms: MCAR, custom logistic/threshold/quantile MNAR, and the original JINGWEI threshold kernel.
 - MSE/MAE/RMSE/NRMSE and correlations use evaluation entries only. Undefined
   correlations remain empty. W2 compares multivariate **sample distributions**
   on a common protein subset, never a flattened intensity distribution. W2

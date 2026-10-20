@@ -90,14 +90,14 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed):
         factorized = factorize_dmf(model)
     else:
         from .ae_models import build_dcae
-        model = build_dcae(params.get("ae_architecture", "native"), dropout=params.get("ae_dropout", .1),
+        model = build_dcae(params.get("ae_architecture", "global"), dropout=params.get("ae_dropout", .1),
                      input_feature_dim=matrix.shape[1], ae_dim=params.get("latent_dim", 64),
                      mask_predictor_hidden_dim=params.get("mask_predictor_hidden_dim", params.get("hidden_dims", [256])[0]),
                      num_encoder_blocks=params.get("encoder_blocks", 2),
                      num_decoder_blocks=params.get("decoder_blocks", 2),
                      dilation=params.get("dilation", 2))
         factorized = False
-        print(f"AE architecture={params.get('ae_architecture', 'native')} | parameters={sum(p.numel() for p in model.parameters())}", flush=True)
+        print(f"AE architecture={params.get('ae_architecture', 'global')} | parameters={sum(p.numel() for p in model.parameters())}", flush=True)
     model.to(device)
     target = torch.from_numpy(normalized).to(device)
     input_mask = torch.as_tensor(available & ~training_hidden, dtype=torch.float32, device=device)
@@ -166,7 +166,8 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed):
     return predicted, {
         "device": device, "actual_device": str(actual), "training_device": str(actual),
         "torch_version": torch.__version__, "training_engine": "torch",
-        "training_protocol": "fixed second mask; supervision on all remaining observations",
+        "training_protocol": ("fixed model-supplied mask; supervision on remaining observations" if training_hidden.any()
+                              else "method-owned training on common evaluation-corrupted input; no platform training mask"),
         "normalization": "per-feature mean/std fitted after evaluation masking",
         "dmf_factorized_first_linear": factorized,
         "precision": "float32", "epochs_trained": epochs, "training_steps": steps,
@@ -175,7 +176,7 @@ def run_jingwei_torch(name, matrix, training_hidden, params, *, device, seed):
         "initialization_s": initialized - started, "training_s": trained - initialized,
         "prediction_s": finished - trained,
         "model_parameters": sum(parameter.numel() for parameter in model.parameters()),
-        **({"ae_architecture": params.get("ae_architecture", "native"),
+        **({"ae_architecture": params.get("ae_architecture", "global"),
             "model_architecture_version": getattr(model, "architecture_version", "native-dcae-v1"),
             "ae_dropout": params.get("ae_dropout", .1) if getattr(model, "mask_aware", False) else 0.,
             "mask_head_input": "latent" if getattr(model, "mask_aware", False) else "reconstruction"}

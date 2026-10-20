@@ -38,7 +38,7 @@ def test_original_bird_icon_used_for_application_and_window():
     assert {(16, 16), (32, 32), (48, 48), (256, 256)} <= sizes
     window = QWidget()
     apply_application_icon(app, window)
-    assert app.applicationName() == "JINGWEI Benchmark"
+    assert app.applicationName() == "jingwei"
     assert not app.windowIcon().isNull()
     assert not window.windowIcon().isNull()
     assert app.windowIcon().pixmap(32, 32).toImage() == window.windowIcon().pixmap(32, 32).toImage()

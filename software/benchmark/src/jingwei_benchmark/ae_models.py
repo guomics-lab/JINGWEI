@@ -1,7 +1,6 @@
 """Mask-aware convolutional encoder with a global reconstruction bottleneck.
 
-This is an experimental architecture, distinct from both native DCAE and the
-historical notebook snapshot. It uses only the values and mask supplied by its
+This is the current DCAE implementation. It uses only the values and mask supplied by its
 caller; no fitting statistics or evaluation targets are stored in the network.
 """
 
@@ -13,10 +12,10 @@ AE_ARCHITECTURES = ("native", "global")
 MAX_GLOBAL_AE_PARAMETERS = 50_000_000
 
 
-def build_dcae(architecture="native", *, dropout=.1, **kwargs):
+def build_dcae(architecture="global", *, dropout=.1, **kwargs):
     if architecture == "native":
-        from ._native.models import DCAE
-        return DCAE(**kwargs)
+        from ._native.models import LegacyDCAE
+        return LegacyDCAE(**kwargs)
     if architecture == "global":
         return GlobalDCAE(**kwargs, dropout=dropout)
     raise ValueError(f"unknown AE architecture: {architecture}")

@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton, QComboBox,
     QLineEdit, QSpinBox, QCheckBox, QGroupBox, QDialog, QDialogButtonBox, QTabWidget,
     QTreeWidget, QTreeWidgetItem, QTableWidget, QHeaderView, QAbstractItemView,
-    QProgressBar, QPlainTextEdit, QSplitter, QScrollArea,
+    QProgressBar, QPlainTextEdit, QSplitter, QScrollArea, QStackedWidget,
 )
 
 from .gui_i18n import translate
@@ -122,7 +122,7 @@ class WorkbenchLayout:
         self._environment_checking = True
         self._inspecting = False
         from . import __version__
-        self.setWindowTitle("JINGWEI Benchmark " + __version__)
+        self.setWindowTitle("jingwei " + __version__)
         app = QApplication.instance()
         # A light native widget palette keeps unchecked boxes legible even when
         # Windows uses dark mode. Fusion gives stable metrics across DPI scales.
@@ -141,7 +141,8 @@ class WorkbenchLayout:
         badge = QLabel()
         badge.setPixmap(self.logo.scaled(30, 30, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         toolbar.addWidget(badge)
-        brand = QLabel("JINGWEI Benchmark")
+        brand = QLabel("jingwei")
+        self.brand_label = brand
         brand.setObjectName("brand")
         toolbar.addWidget(brand)
         toolbar.addStretch()
@@ -223,21 +224,21 @@ class WorkbenchLayout:
         config.setStretch(1, 1)
         settings = self.group("运行设置", config)
         form = QFormLayout()
+        self.run_settings_form = form
         self.field(form, "command", "任务", self.options([("评测", "benchmark"), ("插补", "impute")]))
-        self.field(form, "evaluation_protocol", "评测方案", self.options([("原 notebook 回放", "original-notebook"), ("公平评测（两次掩蔽）", "fair")]))
-        self.bind(self.fields["evaluation_protocol"], "原 notebook 回放：CSV 首列丢弃，正值 log2，掩蔽前统计量，单次掩蔽，排除全空蛋白列评分。", "setToolTip")
         mechanisms = [("MCAR", "mcar"), ("MNAR · JINGWEI（原仓库）", ORIGINAL_MECHANISM), ("MNAR · Logistic", "mnar-logistic"), ("MNAR · Threshold", "mnar-threshold"), ("MNAR · 分位数（自定义）", "mnar-jingwei")]
         self.field(form, "mechanism", "缺失机制", self.options(mechanisms))
         self.bind(self.fields["mechanism"], "原仓库规则保留 get_mask() 的历史尺度比较、严格区间和固定概率；不做比例校准或边际修复。", "setToolTip")
-        self.field(form, "mask_rate", "评测掩蔽比例", FractionControl(0.2, 0.0001, 0.9999))
+        self.mask_rate_stack = QStackedWidget()
+        self.fields["mask_rate"] = FractionControl(0.2, 0.0001, 0.9999)
+        self.mask_rate_stack.addWidget(self.fields["mask_rate"])
+        self.automatic_mask_rate = self.label("自动")
+        self.bind(self.automatic_mask_rate, "此机制使用固定概率，掩蔽比例由数据决定。", "setToolTip")
+        self.mask_rate_stack.addWidget(self.automatic_mask_rate)
+        self.field_labels["mask_rate"] = self.label("掩蔽比例")
+        form.addRow(self.field_labels["mask_rate"], self.mask_rate_stack)
         self.bind(self.fields["mask_rate"], "训练掩蔽只从评测掩蔽后剩余的观测值中抽取。评测真值不传入方法。", "setToolTip")
-        devices = [("自动", "auto"), ("CPU", "cpu"), ("NVIDIA CUDA", "cuda")] if cuda_supported() else [("CPU", "cpu")]
-        self.field(form, "device", "计算设备", self.options(devices))
         settings.addLayout(form)
-        self.protocol_summary = QLabel()
-        self.protocol_summary.setObjectName("muted")
-        self.bind(self.protocol_summary, "训练掩蔽只从评测掩蔽后剩余的观测值中抽取。评测真值不传入方法。", "setToolTip")
-        settings.addWidget(self.protocol_summary)
         output = QHBoxLayout()
         output.addWidget(self.label("输出目录"))
         self.output_root = QLineEdit(str(self.default_output_root))
@@ -352,17 +353,12 @@ class WorkbenchLayout:
         self.fields["max_dense_mb"].valueChanged.connect(self.invalidate_preview)
         self.fields["command"].currentIndexChanged.connect(self.mode_changed)
         self.fields["command"].currentIndexChanged.connect(self.protocol_changed)
-        self.fields["evaluation_protocol"].currentIndexChanged.connect(self.protocol_changed)
         self.fields["device"].currentIndexChanged.connect(self.device_changed)
-        for key in ("training_mask_rate", "seed"):
-            self.fields[key].valueChanged.connect(self.update_protocol_summary)
-        for key in ("mechanism", "training_mechanism"):
-            self.fields[key].currentIndexChanged.connect(self.update_mask_controls)
+        self.fields["mechanism"].currentIndexChanged.connect(self.update_mask_controls)
         self.fields["paper_probabilities"].toggled.connect(self.update_mask_controls)
         self.mode_changed()
         self.device_changed()
         self.update_method_count()
-        self.update_protocol_summary()
 
     def build_advanced(self, mechanisms):
         from .gui import control, FractionControl
@@ -394,6 +390,8 @@ class WorkbenchLayout:
         self.field(form, "output_scale", "输出矩阵尺度", self.options([("工作尺度", "working"), ("原始输入尺度", "input")]))
         content.addStretch()
         form, content = forms[1]
+        devices = [("自动", "auto"), ("CPU", "cpu"), ("NVIDIA CUDA", "cuda")] if cuda_supported() else [("CPU", "cpu")]
+        self.field(form, "device", "计算设备", self.options(devices))
         self.field(form, "jingwei_preset", "JINGWEI 参数预设", self.options([("通用设置", "standard"), ("原始 benchmark 参数", "original-benchmark")]))
         self.field(form, "training_engine", "JINGWEI 训练引擎", self.options([("PyTorch（较快）", "torch"), ("Lightning（兼容）", "lightning")]))
         for key, spec in NEURAL.items():
@@ -407,9 +405,6 @@ class WorkbenchLayout:
         content.addWidget(self.label("参数优先级：单方法参数 > 原始参数预设 > 通用设置。传统方法使用 CPU。", True))
         content.addStretch()
         form, content = forms[2]
-        self.field(form, "training_mechanism", "训练掩蔽机制", self.options([("与评测相同", None), *mechanisms]))
-        self.field(form, "training_mask_rate", "训练掩蔽比例", FractionControl(0.2, 0.0, 1.0))
-        self.field(form, "seed", "随机种子", control(("", 0, 0, 2147483647)))
         self.field(form, "mask_level", "缺失概率的丰度水平", self.options([("每个矩阵条目", "entry"), ("每个蛋白的均值", "feature-mean")]))
         for key, spec in {
             "logistic_slope": ("Logistic 斜率（非正）", -1., -100., 0.),
@@ -484,11 +479,8 @@ class WorkbenchLayout:
             self.preview_dialog.exec()
 
     def current_method_changed(self, item, previous=None):
-        from .gui import value
         name = item.data(0, Qt.UserRole) if item else None
-        notebook = ("evaluation_protocol" in self.fields and value(self.fields["evaluation_protocol"]) == "original-notebook"
-                    and value(self.fields["command"]) == "benchmark")
-        self.parameter_button.setEnabled(bool(PARAMETERS.get(name)) and not notebook)
+        self.parameter_button.setEnabled(bool(PARAMETERS.get(name)))
 
     def edit_current_method(self):
         item = self.method_tree.currentItem()
@@ -499,57 +491,27 @@ class WorkbenchLayout:
     def update_method_count(self):
         self.method_count.setText(self.t("已选 {count} 种", count=sum(box.isChecked() for box in self.method_checks.values())))
 
-    def update_protocol_summary(self):
-        from .gui import value
-        rate = value(self.fields["training_mask_rate"])
-        seed = value(self.fields["seed"])
-        mechanism = value(self.fields["training_mechanism"]) or value(self.fields["mechanism"])
-        if value(self.fields["evaluation_protocol"]) == "original-notebook":
-            source = "原 notebook：单次掩蔽 · 种子 {seed}"
-        elif mechanism == ORIGINAL_MECHANISM:
-            source = "训练掩蔽：原仓库概率 · 种子 {seed}"
-        elif not uses_mask_rate(mechanism, value(self.fields["paper_probabilities"])):
-            source = "训练掩蔽：未校准概率 · 种子 {seed}"
-        else:
-            source = "训练掩蔽 {rate:.0%} · 种子 {seed}"
-        self.protocol_summary.setText(self.t(source, rate=rate, seed=seed))
-
     def update_mask_controls(self):
         from .gui import value
-        benchmark = value(self.fields["command"]) == "benchmark"
-        notebook = benchmark and value(self.fields["evaluation_protocol"]) == "original-notebook"
-        for key in ("mechanism", "mask_rate"):
-            self.fields[key].setVisible(benchmark and not notebook)
-            self.field_labels[key].setVisible(benchmark and not notebook)
-        self.fields["evaluation_protocol"].setVisible(benchmark)
-        self.field_labels["evaluation_protocol"].setVisible(benchmark)
-        self.fields["evaluation_protocol"].setEnabled(benchmark)
-        self.fields["mechanism"].setEnabled(benchmark and not notebook)
-        self.fields["training_mechanism"].setEnabled(benchmark and not notebook)
-        for key in ("orientation", "header", "index_column", "missing_values", "scale", "transform", "layer", "jingwei_preset", "training_engine"):
-            self.fields[key].setEnabled(not notebook)
-        for key in NEURAL:
-            self.fields[key].setEnabled(not notebook)
-        self.fields["mice_backend"].setEnabled(not notebook)
         self.current_method_changed(self.method_tree.currentItem())
         for name, box in self.method_checks.items():
             box.item.setText(0, self.t(self.method_label(name)))
-        benchmark = benchmark and not notebook
         evaluation = value(self.fields["mechanism"])
-        training = value(self.fields["training_mechanism"]) or evaluation
+        benchmark = value(self.fields["command"]) == "benchmark"
+        self.fields["mechanism"].setEnabled(benchmark)
         uncalibrated = value(self.fields["paper_probabilities"])
-        self.fields["mask_rate"].setEnabled(benchmark and uses_mask_rate(evaluation, uncalibrated))
-        self.fields["training_mask_rate"].setEnabled(benchmark and uses_mask_rate(training, uncalibrated))
-        custom = {evaluation, training} - {"mcar", ORIGINAL_MECHANISM}
+        controlled = uses_mask_rate(evaluation, uncalibrated)
+        self.fields["mask_rate"].setEnabled(benchmark and controlled)
+        self.mask_rate_stack.setCurrentIndex(0 if controlled else 1)
+        custom = ({evaluation} - {"mcar", ORIGINAL_MECHANISM}) if benchmark else set()
         for key in ("mask_level", "paper_probabilities", "allow_empty_marginals"):
-            self.fields[key].setEnabled(benchmark and bool(custom or (key == "allow_empty_marginals" and "mcar" in {evaluation, training})))
+            self.fields[key].setEnabled(benchmark and bool(custom or (key == "allow_empty_marginals" and evaluation == "mcar")))
         for key, mechanisms in {
             "logistic_slope": {"mnar-logistic"}, "low_quantile": {"mnar-jingwei", "mnar-threshold"},
             "high_quantile": {"mnar-jingwei"}, "low_probability": {"mnar-jingwei", "mnar-threshold"},
             "high_probability": {"mnar-jingwei"}, "threshold_probability": {"mnar-threshold"},
         }.items():
-            self.fields[key].setEnabled(benchmark and bool(custom & mechanisms))
-        self.update_protocol_summary()
+            self.fields[key].setEnabled(bool(custom & mechanisms))
 
     def protocol_changed(self):
         self.update_mask_controls()
@@ -566,12 +528,6 @@ class WorkbenchLayout:
             self.inspect_data()
 
     def method_label(self, name):
-        from .gui import value
-        notebook = value(self.fields["command"]) == "benchmark" and value(self.fields["evaluation_protocol"]) == "original-notebook"
-        if notebook:
-            labels = {"missforest": "MissForest · Python", "mice-pmm": "MICE · Linear"}
-            if name in labels:
-                return labels[name]
         return LABELS.get(name, name)
 
     def update_data_labels(self):
@@ -632,7 +588,6 @@ class WorkbenchLayout:
         self.update_data_labels()
         self.update_environment_labels()
         self.update_method_count()
-        self.update_protocol_summary()
         self._last_result_digest = None
         self.refresh_jobs()
         if selected_row >= 0:

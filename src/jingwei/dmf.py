@@ -17,12 +17,46 @@ class DMFImputer(pl.LightningModule):
         lr=1e-3,
         weight_decay=1e-5,
         batch_size=1024,
+        supervision_mask_tensor=None,
+        num_workers=0,
     ):
         super(DMFImputer, self).__init__()
 
-        self.full_data_tensor = full_data_tensor
-        self.full_mask_tensor = full_mask_tensor
-        self.save_hyperparameters(ignore=["full_data_tensor", "full_mask_tensor"])
+        supervision = (
+            full_mask_tensor
+            if supervision_mask_tensor is None
+            else supervision_mask_tensor
+        )
+        self.register_buffer(
+            "full_mask_tensor", full_mask_tensor.clone(), persistent=False
+        )
+        self.register_buffer(
+            "supervision_mask_tensor", supervision.clone(), persistent=False
+        )
+        if (
+            full_data_tensor.shape != full_mask_tensor.shape
+            or full_mask_tensor.shape != self.supervision_mask_tensor.shape
+        ):
+            raise ValueError(
+                "data, input mask and supervision mask must have matching shapes"
+            )
+        for mask in (self.full_mask_tensor, self.supervision_mask_tensor):
+            if not torch.all((mask == 0) | (mask == 1)):
+                raise ValueError("masks must contain only 0 and 1")
+        if torch.any(self.full_mask_tensor > self.supervision_mask_tensor):
+            raise ValueError(
+                "training input must be a subset of supervised observations"
+            )
+        self.register_buffer(
+            "full_data_tensor",
+            torch.where(self.supervision_mask_tensor.bool(), full_data_tensor, 0.0),
+            persistent=False,
+        )
+        if not torch.isfinite(self.full_data_tensor).all():
+            raise ValueError("supervised training values must be finite")
+        self.save_hyperparameters(
+            ignore=["full_data_tensor", "full_mask_tensor", "supervision_mask_tensor"]
+        )
 
         n_samples, n_proteins = self.full_data_tensor.shape
         self.model = DMF(
@@ -38,45 +72,61 @@ class DMFImputer(pl.LightningModule):
         self.weight_decay = weight_decay
         self.reconstruction_weight = reconstruction_weight
         self.mask_weight = mask_weight
+        self.num_workers = num_workers
 
-    def forward(self, x):
-        return self.model(x)
+    def forward(self, x, row_indices=None):
+        return self.model(x, row_indices=row_indices)
 
     def train_dataloader(self):
         train_dataset = torch.utils.data.TensorDataset(
             self.full_data_tensor * self.full_mask_tensor,
             self.full_data_tensor,
             self.full_mask_tensor,
+            self.supervision_mask_tensor,
+            torch.arange(
+                self.full_data_tensor.shape[0], device=self.full_data_tensor.device
+            ),
         )
         return torch.utils.data.DataLoader(
             train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=20,
-            persistent_workers=True,
+            num_workers=self.num_workers,
+            persistent_workers=self.num_workers > 0,
         )
 
     def training_step(self, batch, batch_idx):
-        input_batch, target_batch, mask_batch = batch
-        x_tilde, predicted_mask_logits = self.model(input_batch)
-        observed_points = mask_batch == 1
+        input_batch, target_batch, mask_batch, supervision_batch, row_indices = batch
+        x_tilde, predicted_mask_logits = self.model(
+            input_batch, row_indices=row_indices
+        )
+        observed_points = supervision_batch == 1
         if observed_points.sum() > 0:
-            recon_loss = F.mse_loss(x_tilde[observed_points], target_batch[observed_points])
+            recon_loss = F.mse_loss(
+                x_tilde[observed_points], target_batch[observed_points]
+            )
         else:
-            recon_loss = torch.tensor(0.0, device=self.device)
+            recon_loss = x_tilde.sum() * 0.0
 
-        if self.mask_weight > 0:
+        if self.mask_weight > 0 and observed_points.any():
             mask_loss = F.binary_cross_entropy_with_logits(
-                predicted_mask_logits, mask_batch
+                predicted_mask_logits[observed_points], mask_batch[observed_points]
             )
             mask_acc = (
-                (torch.sigmoid(predicted_mask_logits) > 0.5) == mask_batch
-            ).float().mean()
+                (
+                    (torch.sigmoid(predicted_mask_logits[observed_points]) > 0.5)
+                    == mask_batch[observed_points]
+                )
+                .float()
+                .mean()
+            )
         else:
-            mask_loss = torch.tensor(0.0, device=self.device)
+            mask_loss = predicted_mask_logits.sum() * 0.0
             mask_acc = torch.tensor(0.0, device=self.device)
 
-        total_loss = self.reconstruction_weight * recon_loss + self.mask_weight * mask_loss
+        total_loss = (
+            self.reconstruction_weight * recon_loss + self.mask_weight * mask_loss
+        )
 
         self.log("train/loss", total_loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log("train/recon_loss", recon_loss, on_step=True, on_epoch=True)
@@ -99,7 +149,7 @@ class DMFImputer(pl.LightningModule):
         with torch.no_grad():
             full_matrix = self.model.get_full_matrix()
             imputed_data = self.full_data_tensor.clone()
-            unobserved_mask = self.full_mask_tensor == 0
+            unobserved_mask = self.supervision_mask_tensor == 0
             imputed_data[unobserved_mask] = full_matrix[unobserved_mask]
 
             return imputed_data

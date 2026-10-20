@@ -10,6 +10,19 @@ pytest.importorskip("pimmslearn")
 from jingwei_benchmark.pimms_engine import cached_loaders, _cached_dataset, run_pimms
 
 
+@pytest.mark.parametrize("name", ["pimms-dae", "pimms-vae"])
+def test_second_mask_empty_features_report_native_input_limit(name, tmp_path):
+    from jingwei_benchmark.methods import MethodInputError
+    matrix=np.array([[2., 3.], [4., 5.]])
+    hidden=np.array([[False, True], [False, True]])
+    before=matrix.copy(),hidden.copy()
+    with pytest.raises(MethodInputError,match="1 features are empty after the second mask") as error:
+        run_pimms(name,matrix,hidden,{},device="cpu",seed=0,folder=tmp_path)
+    assert error.value.failure_kind=="unsupported_input"
+    np.testing.assert_array_equal(matrix,before[0])
+    np.testing.assert_array_equal(hidden,before[1])
+
+
 @pytest.fixture
 def frame():
     rng = np.random.default_rng(23)

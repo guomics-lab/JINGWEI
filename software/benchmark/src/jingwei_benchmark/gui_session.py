@@ -17,9 +17,9 @@ class SessionState:
         fields = data.get("fields", {})
         if not isinstance(fields, dict):
             return False
-        # Pre-1.0.3 forms always used the fair protocol. Do not silently relabel
-        # their quantile mechanism or revive an old repeat count.
-        set_value(self.fields["evaluation_protocol"], fields.get("evaluation_protocol", "fair"))
+        fields = dict(fields)
+        # Historical protocol, repeat and training-mask controls are no longer
+        # part of the desktop form. Unknown saved fields are ignored below.
         for key, widget in self.fields.items():
             setting = fields.get(key)
             if isinstance(widget, QComboBox):
@@ -29,9 +29,20 @@ class SessionState:
                     set_value(widget, setting)
             elif isinstance(widget, QCheckBox) and isinstance(setting, bool):
                 set_value(widget, setting)
-            elif isinstance(widget, (QSpinBox, QDoubleSpinBox)) and type(setting) in (int, float) and math.isfinite(setting):
-                if isinstance(widget, QDoubleSpinBox) or isinstance(setting, int):
+            elif isinstance(widget, (QSpinBox, QDoubleSpinBox)) and type(setting) in (int, float):
+                if type(setting) is float and not math.isfinite(setting):
+                    continue
+                if isinstance(widget, QDoubleSpinBox):
+                    try:
+                        setting = float(setting)
+                    except OverflowError:
+                        continue
+                    # FractionControl accepts fractions while its native Qt
+                    # bounds are percentages, so let its setter handle bounds.
                     set_value(widget, setting)
+                elif type(setting) is int:
+                    # Clamp before Qt converts Python integers to its C++ range.
+                    set_value(widget, max(widget.minimum(), min(widget.maximum(), setting)))
             elif isinstance(widget, QLineEdit) and isinstance(setting, str):
                 set_value(widget, setting)
         self.mode_changed()
@@ -44,8 +55,8 @@ class SessionState:
                 box.setChecked(name in methods)
         parameters = data.get("parameters", {})
         if isinstance(parameters, dict):
-            from .gui_parameters import PARAMETERS
-            self.method_parameters = {name: {k: v for k, v in settings.items() if k in PARAMETERS.get(name, {})}
+            from .gui_parameters import PARAMETERS, valid_overrides
+            self.method_parameters = {name: valid_overrides(name, settings)
                                       for name, settings in parameters.items() if isinstance(settings, dict) and name in PARAMETERS}
         self.job_name.setText(data.get("job_name", "") if isinstance(data.get("job_name", ""), str) else "")
         if isinstance(data.get("output_root"), str):
@@ -95,7 +106,8 @@ class SessionState:
 
     def save_session(self):
         from .gui import value
-        data = {"schema": 1, "fields": {key: value(widget) for key, widget in self.fields.items()},
+        data = {"schema": 1, "dcae_architecture_version": "global-ae-v1",
+                "fields": {key: value(widget) for key, widget in self.fields.items()},
                 "input": self.input_path.text(), "methods": [name for name, box in self.method_checks.items() if box.isChecked()],
                 "parameters": self.method_parameters, "w2_features": self._pending_features[1] if self._pending_features else self.feature_selection,
                 "job_name": self.job_name.text(), "output_root": self.output_root.text(),

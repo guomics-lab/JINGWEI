@@ -89,20 +89,22 @@ def test_notebook_cli_preserves_masked_worker_boundary_and_one_run(tmp_path):
     assert (rows.n_evaluated + rows.n_excluded == rows.n_held_out).all()
 
 
-@pytest.mark.parametrize('evaluation,training', [('mcar', 'mnar-logistic'), ('mnar-logistic', 'mcar')])
-def test_uncalibrated_custom_mnar_never_resets_other_stages_mcar_rate(tmp_path, evaluation, training):
+@pytest.mark.parametrize('evaluation', ['mcar', 'mnar-logistic'])
+def test_uncalibrated_mnar_preserves_mcar_rate_and_never_adds_platform_training_mask(tmp_path, evaluation):
     source = tmp_path / 'input.csv'
     pd.DataFrame(np.random.default_rng(3).uniform(10, 100, (40, 12)),
                  index=[f'S{i}' for i in range(40)], columns=[f'P{i}' for i in range(12)]).to_csv(source)
     output = tmp_path / 'out'
     assert main(['benchmark', '--input', str(source), '--output', str(output), '--methods', 'mean',
-        '--repeats', '1', '--mechanism', evaluation, '--training-mechanism', training,
-        '--mask-rate', '.4', '--training-mask-rate', '.3', '--uncalibrated-mnar',
+        '--repeats', '1', '--mechanism', evaluation,
+        '--mask-rate', '.4', '--uncalibrated-mnar',
         '--allow-empty-marginals', '--device', 'cpu']) == 0
     config = json.loads((output / 'repeat_000/mask_config.json').read_text())
-    stage = 'evaluation' if evaluation == 'mcar' else 'training'
-    assert config[stage]['requested_rate'] == (.4 if stage == 'evaluation' else .3)
-    assert abs(config[stage]['actual_rate'] - config[stage]['requested_rate']) <= 1 / config[stage]['eligible_count']
+    if evaluation=='mcar':
+        assert config['evaluation']['requested_rate']==.4
+        assert abs(config['evaluation']['actual_rate']-.4)<=1/config['evaluation']['eligible_count']
+    assert config['training']['hidden_count']==0
+    assert config['training']['probability_mode']=='not-applied'
 
 
 def test_notebook_random_stream_survives_isolated_worker_boundary(tmp_path):

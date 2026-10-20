@@ -4,11 +4,11 @@
 
 [Setup]
 AppId=JINGWEI.Benchmark.Download
-AppName=JINGWEI Benchmark
+AppName=jingwei
 AppVersion={#AppVersion}
 AppPublisher=Guomics Lab
 AppPublisherURL=https://github.com/guomics-lab/JINGWEI
-DefaultDirName={localappdata}\Programs\JINGWEI Benchmark
+DefaultDirName={localappdata}\Programs\jingwei
 CreateAppDir=no
 Uninstallable=no
 PrivilegesRequired=lowest
@@ -25,19 +25,19 @@ DisableStartupPrompt=yes
 ShowLanguageDialog=yes
 SetupIconFile={#AppIcon}
 OutputDir={#ReleaseDir}
-OutputBaseFilename=JINGWEI-Benchmark-Windows-Setup
+OutputBaseFilename=jingwei-Windows-Setup
 VersionInfoVersion={#AppVersion}
-VersionInfoDescription=JINGWEI Benchmark Windows Installer
+VersionInfoDescription=jingwei Windows Installer
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "chinesesimp"; MessagesFile: "languages\ChineseSimplified.isl"
 
 [CustomMessages]
-english.DownloadStatus=Downloading JINGWEI Benchmark...
-chinesesimp.DownloadStatus=正在下载 JINGWEI Benchmark…
-english.InstallStatus=Starting JINGWEI Benchmark Setup...
-chinesesimp.InstallStatus=正在启动 JINGWEI Benchmark 安装程序…
+english.DownloadStatus=Downloading jingwei...
+chinesesimp.DownloadStatus=正在下载 jingwei…
+english.InstallStatus=Starting jingwei Setup...
+chinesesimp.InstallStatus=正在启动 jingwei 安装程序…
 
 [Files]
 #include PayloadInclude

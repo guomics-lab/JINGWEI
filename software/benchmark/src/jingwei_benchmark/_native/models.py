@@ -226,7 +226,7 @@ class ConvAE(nn.Module):
         return recon_loss
 
 
-class DCAE(nn.Module):
+class LegacyDCAE(nn.Module):
     def __init__(
         self,
         input_feature_dim,
@@ -267,6 +267,9 @@ class DCAE(nn.Module):
         x_tilde = recon.squeeze(1)
         predicted_mask_logits = self.mask_predictor(x_tilde)
         return x_tilde, predicted_mask_logits
+
+
+from ..ae_models import GlobalDCAE as DCAE
 
 
 class DMF(nn.Module):

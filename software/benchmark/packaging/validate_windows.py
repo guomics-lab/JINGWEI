@@ -16,11 +16,12 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--all-methods", action="store_true")
     parser.add_argument("--cuda", action="store_true")
+    parser.add_argument("--background", action="store_true", help="render native Qt windows without showing them on the user's desktop")
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     executable = args.executable.resolve()
-    console = executable.with_name("jingwei-benchmark.exe")
+    console = executable.with_name("jingwei-cli.exe")
     if not console.is_file():
         raise RuntimeError("Missing standalone console executable beside the GUI")
     env = {key: value for key, value in os.environ.items()
@@ -34,14 +35,19 @@ def main():
                                 cwd=ROOT, env=env, timeout=timeout)
         if result.returncode:
             raise RuntimeError(f"Frozen {module} failed ({result.returncode}); see {env['JINGWEI_PROCESS_LOG']}")
-    run("desktop_smoke", output / "native-ui", timeout=360)
+    hidden = ["--hidden"] if args.background else []
+    run("desktop_smoke", output / "native-ui", *hidden, timeout=360)
     ui = json.loads((output / "native-ui/smoke-result.json").read_text(encoding="utf-8"))
     assert ui["status"] == "completed" and ui["logo_loaded"] and ui["native_ui"]
     assert ui["qt_platform"] == "windows" and all(ui["windows_native_icons"].values())
     assert ui["app_user_model_id"] == "JINGWEI.Benchmark.Desktop"
     assert ui["languages"] == ["zh", "en"] and ui["language_switch_keeps_configuration"]
     assert ui["default_timeout_seconds"] == 1800
-    run("desktop_smoke", output / "native-ui", "--reopen", timeout=360)
+    assert ui["startup_without_task"] and ui["live_log"] and ui["manual_task_open"] and ui["repeats_control_removed"]
+    assert ui["dcae_architecture_version"] == "global-ae-v1"
+    assert ui["run_settings_rows"] == 3 and ui["startup_environment_ready_before_main"]
+    assert ui["application_name"] == "jingwei"
+    run("desktop_smoke", output / "native-ui", "--reopen", *hidden, timeout=360)
     reopened = json.loads((output / "native-ui/reopen-result.json").read_text(encoding="utf-8"))
     assert reopened["status"] == "completed" and reopened["environment_cache_hit"]
     assert reopened["environment_probe_count"] == 0
@@ -56,13 +62,15 @@ def main():
     default_data = json.loads(default_inspection.stdout)
     assert (default_data["samples"], default_data["features"]) == (210, 1542)
     fixture = Path(ui["job_folder"]) / "input.csv"
-    methods = ["all"] if args.all_methods else ["mean", "bpca", "jingwei-dmf", "pimms-vae"]
+    methods = ["all"] if args.all_methods else ["mean", "bpca", "jingwei-dmf", "jingwei-dcae", "pimms-vae"]
     common = ["benchmark", "--input", fixture, "--repeats", "1", "--mask-rate", ".05", "--threads", "1",
               "--max-epochs", "1", "--batch-size", "4", "--latent-dim", "4", "--hidden-dims", "8", "--timeout", "180"]
     run("cli", *common, "--methods", *methods, "--device", "cpu", "--output", output / "cpu")
     import pandas as pd
     cpu = pd.read_csv(output / "cpu/metrics.csv")
     assert (cpu.status == "completed").all()
+    updated = cpu[cpu.method == "jingwei-dcae"].iloc[0]
+    assert updated.ae_architecture == "global" and updated.model_architecture_version == "global-ae-v1"
     if args.all_methods:
         assert len(cpu) == 35
         for name in ("pimms-dae", "pimms-vae", "pimms-cf"):
@@ -83,6 +91,28 @@ def main():
         gpu = pd.read_csv(output / "cuda/metrics.csv")
         assert len(gpu) == 5 and (gpu.status == "completed").all()
         assert gpu.actual_device.str.startswith("cuda").all()
+    # Exercise the actual default dataset through one shared original MNAR mask.
+    # Its all-empty columns exposed the missing notebook preprocessing adapter.
+    original_output = output / "alzheimer-original-mnar"
+    run("cli", "benchmark", "--methods", "mean", "knn", "jingwei-dmf", "jingwei-dcae", "pimms-dae", "pimms-vae", "pimms-cf",
+        "--mechanism", "mnar-jingwei-original", "--seed", "0", "--device", "cpu",
+        "--max-epochs", "2", "--latent-dim", "8", "--hidden-dims", "32",
+        "--batch-size", "32", "--threads", "2", "--output", original_output)
+    import numpy as np
+    original = pd.read_csv(original_output / "metrics.csv")
+    assert len(original) == 7 and (original.status == "completed").all()
+    with np.load(original_output / "repeat_000/masks.npz") as masks:
+        available = masks["observed"] & ~masks["evaluation_hidden"]
+        empty = ~available.any(axis=0)
+        assert empty.any() and not masks["training_hidden"].any()
+        excluded = int(masks["evaluation_hidden"][:, empty].sum())
+        assert (original.zero_cols == int(empty.sum())).all()
+        assert (original.n_excluded == excluded).all()
+        assert (original.n_evaluated + original.n_excluded == original.n_held_out).all()
+        assert original.n_evaluated.nunique() == 1
+        for method in original.method:
+            exported = pd.read_csv(original_output / f"repeat_000/{method}/imputed.csv", index_col=0).to_numpy()
+            assert np.isnan(exported[:, empty]).all() and np.isfinite(exported[:, ~empty]).all()
     full_input_checked = False
     if args.all_methods:
         # The integration matrix has complete profiles and cannot expose the
@@ -101,7 +131,8 @@ def main():
         full_input_checked = True
     (output / "validation.json").write_text(json.dumps({"native_ui": ui, "reopened_ui": reopened, "cpu_completed": len(cpu),
         "cuda_completed": 5 if args.cuda else 0, "conda_paths_removed": True,
-        "public_console_validated": True, "full_default_input_checked": full_input_checked}, indent=2), encoding="utf-8")
+        "public_console_validated": True, "alzheimer_original_mnar_completed": len(original),
+        "platform_mask_count": 1, "full_default_input_checked": full_input_checked}, indent=2), encoding="utf-8")
     print("Frozen desktop UI and backend validation passed")
 
 

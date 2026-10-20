@@ -10,13 +10,13 @@
 
 [Setup]
 AppId={{91575868-B05E-4E1F-BD07-DA7D326C7329}
-AppName=JINGWEI Benchmark
+AppName=jingwei
 AppVersion={#AppVersion}
 AppPublisher=Guomics Lab
 AppPublisherURL=https://github.com/guomics-lab/JINGWEI
 AppSupportURL=https://github.com/guomics-lab/JINGWEI/issues
-DefaultDirName={localappdata}\Programs\JINGWEI Benchmark
-DefaultGroupName=JINGWEI Benchmark
+DefaultDirName={localappdata}\Programs\jingwei
+DefaultGroupName=jingwei
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -25,23 +25,27 @@ DisableProgramGroupPage=yes
 DisableWelcomePage=no
 WizardStyle=modern
 SetupIconFile={#SourceDir}\jingwei.ico
-UninstallDisplayIcon={app}\JINGWEI Benchmark.exe
-LicenseFile=..\LICENSE
+UninstallDisplayIcon={app}\jingwei.exe
+LicenseFile={#SourceDir}\LICENSE.txt
 OutputDir={#ReleaseDir}
-OutputBaseFilename=JINGWEI-Benchmark-{#AppVersion}-windows-x86_64-setup
+OutputBaseFilename=jingwei-{#AppVersion}-windows-x86_64-setup
 VersionInfoVersion={#AppVersion}
-VersionInfoDescription=JINGWEI Benchmark Setup
+VersionInfoDescription=jingwei Setup
 Compression=lzma2/normal
 SolidCompression=yes
 LZMAUseSeparateProcess=yes
 LZMANumBlockThreads=4
+#ifdef SingleFileInstaller
+DiskSpanning=no
+#else
 DiskSpanning=yes
 DiskSliceSize=1900000000
 SlicesPerDisk=1
+#endif
 CloseApplications=yes
 RestartApplications=no
-Uninstallable=yes
-UsePreviousAppDir=yes
+Uninstallable=not IsValidationInstall
+UsePreviousAppDir=not IsValidationInstall
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -53,10 +57,27 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+Type: files; Name: "{app}\JINGWEI Benchmark.exe"; Check: not IsValidationInstall
+Type: files; Name: "{app}\jingwei-benchmark.exe"; Check: not IsValidationInstall
+Type: files; Name: "{app}\LICENSE"; Check: not IsValidationInstall
+Type: files; Name: "{autoprograms}\JINGWEI Benchmark.lnk"; Check: not IsValidationInstall
+Type: files; Name: "{autoprograms}\JINGWEI Benchmark guide.url"; Check: not IsValidationInstall
+Type: files; Name: "{autodesktop}\JINGWEI Benchmark.lnk"; Check: not IsValidationInstall
+
 [Icons]
-Name: "{autoprograms}\JINGWEI Benchmark"; Filename: "{app}\JINGWEI Benchmark.exe"; WorkingDir: "{userdocs}"; AppUserModelID: "JINGWEI.Benchmark.Desktop"
-Name: "{autodesktop}\JINGWEI Benchmark"; Filename: "{app}\JINGWEI Benchmark.exe"; WorkingDir: "{userdocs}"; AppUserModelID: "JINGWEI.Benchmark.Desktop"; Tasks: desktopicon
-Name: "{autoprograms}\JINGWEI Benchmark guide"; Filename: "https://github.com/guomics-lab/JINGWEI/blob/main/software/benchmark/README.md"
+Name: "{autoprograms}\jingwei"; Filename: "{app}\jingwei.exe"; WorkingDir: "{userdocs}"; AppUserModelID: "JINGWEI.Benchmark.Desktop"; Check: not IsValidationInstall
+Name: "{autodesktop}\jingwei"; Filename: "{app}\jingwei.exe"; WorkingDir: "{userdocs}"; AppUserModelID: "JINGWEI.Benchmark.Desktop"; Tasks: desktopicon; Check: not IsValidationInstall
+Name: "{autoprograms}\jingwei guide"; Filename: "https://github.com/guomics-lab/JINGWEI/blob/main/software/benchmark/README.md"; Check: not IsValidationInstall
 
 [Run]
-Filename: "{app}\JINGWEI Benchmark.exe"; WorkingDir: "{userdocs}"; Description: "{cm:LaunchProgram,JINGWEI Benchmark}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\jingwei.exe"; WorkingDir: "{userdocs}"; Description: "{cm:LaunchProgram,jingwei}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function IsValidationInstall: Boolean;
+begin
+  { Maintainer-only isolated extraction. No uninstall registry, shortcuts or
+    automatic shutdown of the user's running app. The validator also passes
+    /NOICONS, /NOCLOSEAPPLICATIONS and an explicit temporary /DIR. }
+  Result := ExpandConstant('{param:JINGWEI-VALIDATION|0}') = '1';
+end;

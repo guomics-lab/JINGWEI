@@ -7,6 +7,35 @@ import pandas as pd
 from jingwei_benchmark.cli import main
 
 
+def test_all_35_methods_receive_identical_single_mask_input(tmp_path,monkeypatch):
+    import hashlib
+    import jingwei_benchmark.benchmark as orchestration
+    from jingwei_benchmark.methods import METHODS
+    source=fixture(tmp_path)
+    received=[]
+    def availability(*args,names=None,**kwargs):
+        return {name:{'available':True,'reason':None} for name in names}
+    def worker(payload,*args):
+        path=__import__('pathlib').Path(payload['input_file'])
+        with np.load(path) as bundle:
+            assert not bundle['training_hidden'].any()
+            values=bundle['values'].copy()
+        received.append((payload['method'],path,hashlib.sha256(path.read_bytes()).hexdigest()))
+        filled=np.where(np.isfinite(values),values,np.nanmean(values,axis=0)[None,:])
+        np.savez(__import__('pathlib').Path(payload['folder'])/'predictions.npz',values=filled)
+        return {'status':'completed','time_s':0.}
+    monkeypatch.setattr(orchestration,'availability',availability)
+    monkeypatch.setattr(orchestration,'_run_worker',worker)
+    output=tmp_path/'all-methods'
+    assert main(['benchmark','--input',str(source),'--methods','all','--device','cpu',
+                 '--output',str(output)])==0
+    assert {r[0] for r in received}==set(METHODS) and len(received)==35
+    assert len({(r[1],r[2]) for r in received})==1
+    manifest=json.loads((output/'manifest.json').read_text())
+    assert manifest['mask_protocol_version']==3
+    assert manifest['effective_protocol']['platform_mask_count']==1
+
+
 def fixture(tmp_path):
     source = tmp_path / "input.csv"
     pd.DataFrame(
@@ -49,6 +78,7 @@ def test_native_benchmark_emits_replayable_masks_and_real_metrics(tmp_path):
         sent = np.load(folder / "method_input.npz", allow_pickle=False)
         assert np.isnan(sent["values"][masks["evaluation_hidden"]]).all()
         assert not (masks["evaluation_hidden"] & masks["training_hidden"]).any()
+        assert not masks["training_hidden"].any()
     manifest = json.loads((output / "manifest.json").read_text())
     assert len(manifest["input_sha256"]) == 64
     assert (output / "report.html").is_file()
@@ -110,6 +140,7 @@ def test_imputation_preserves_observations_and_has_no_evaluation_mask(tmp_path):
     )
     assert np.isfinite(values).all()
     assert not np.load(output / "repeat_000" / "masks.npz")["evaluation_hidden"].any()
+    assert not np.load(output / "repeat_000" / "masks.npz")["training_hidden"].any()
 
 
 def test_existing_output_is_not_overwritten(tmp_path):

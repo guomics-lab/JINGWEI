@@ -102,7 +102,9 @@ class ResidualDilatedConvLayer(nn.Module):
 
 
 class EncoderDilatedConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, dilation=3, num_layers=3):
+    def __init__(
+        self, in_channels, out_channels, kernel_size=3, dilation=3, num_layers=3
+    ):
         super(EncoderDilatedConvBlock, self).__init__()
         if in_channels != out_channels:
             self.proj = nn.Conv1d(in_channels, out_channels, kernel_size=1)
@@ -129,7 +131,9 @@ class EncoderDilatedConvBlock(nn.Module):
 
 
 class DecoderDilatedConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, dilation=3, num_layers=3):
+    def __init__(
+        self, in_channels, out_channels, kernel_size=3, dilation=3, num_layers=3
+    ):
         super(DecoderDilatedConvBlock, self).__init__()
         self.upsample = nn.ConvTranspose1d(
             in_channels, in_channels, kernel_size=4, stride=2, padding=1
@@ -156,7 +160,9 @@ class DecoderDilatedConvBlock(nn.Module):
 
 
 class ConvAE(nn.Module):
-    def __init__(self, latent_dim=16, num_encoder_blocks=9, num_decoder_blocks=9, dilation=3):
+    def __init__(
+        self, latent_dim=16, num_encoder_blocks=9, num_decoder_blocks=9, dilation=3
+    ):
         super(ConvAE, self).__init__()
 
         self.conv_up = nn.Sequential(
@@ -220,7 +226,7 @@ class ConvAE(nn.Module):
         return recon_loss
 
 
-class DCAE(nn.Module):
+class LegacyDCAE(nn.Module):
     def __init__(
         self,
         input_feature_dim,
@@ -263,9 +269,17 @@ class DCAE(nn.Module):
         return x_tilde, predicted_mask_logits
 
 
+from .ae_models import GlobalDCAE as DCAE
+
+
 class DMF(nn.Module):
     def __init__(
-        self, n_rows, n_cols, embedding_dim=64, hidden_dims=[256, 128], mask_predictor_hidden_dim=128
+        self,
+        n_rows,
+        n_cols,
+        embedding_dim=64,
+        hidden_dims=[256, 128],
+        mask_predictor_hidden_dim=128,
     ):
         super(DMF, self).__init__()
         self.n_rows = n_rows
@@ -299,7 +313,7 @@ class DMF(nn.Module):
 
         self.apply(weights_init)
 
-    def forward(self, x):
+    def forward(self, x, row_indices=None):
         if isinstance(x, tuple) and len(x) == 2:
             row_indices, col_indices = x
             reconstructed_values = self._forward_indices(row_indices, col_indices)
@@ -321,12 +335,11 @@ class DMF(nn.Module):
             )
 
         batch_size = x.shape[0]
-        reconstructed_matrix = torch.zeros_like(x)
-
-        for i in range(batch_size):
-            row_idx = torch.tensor([i % self.n_rows], device=x.device)
-            reconstructed_row = self._reconstruct_rows(row_idx).squeeze(0)
-            reconstructed_matrix[i] = reconstructed_row
+        if row_indices is None:
+            row_indices = torch.arange(batch_size, device=x.device)
+        if row_indices.ndim != 1 or row_indices.numel() != batch_size:
+            raise ValueError("row_indices must contain one sample index per batch row")
+        reconstructed_matrix = self._reconstruct_rows(row_indices)
         predicted_mask_logits = self.mask_predictor(reconstructed_matrix)
 
         return reconstructed_matrix, predicted_mask_logits

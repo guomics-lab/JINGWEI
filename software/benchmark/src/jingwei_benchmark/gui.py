@@ -134,18 +134,14 @@ class ParameterDialog(QDialog):
         layout = QVBoxLayout(self)
         self.fields = {}
         form = QFormLayout()
+        from .gui_parameters import valid_overrides
+        overrides = valid_overrides(name, overrides)
         for key, spec in PARAMETERS.get(name, {}).items():
-            widget = (combo([(self.t("原始卷积 AE"), "native"), (self.t("全局掩码 AE（实验）"), "global")])
-                      if key == "ae_architecture" else control(spec))
+            widget = control(spec)
             if key in overrides:
                 set_value(widget, overrides[key])
             self.fields[key] = widget
             form.addRow(self.t(spec[0]), widget)
-        if "ae_dropout" in self.fields:
-            def update_architecture():
-                self.fields["ae_dropout"].setEnabled(value(self.fields["ae_architecture"]) == "global")
-            self.fields["ae_architecture"].currentIndexChanged.connect(update_architecture)
-            update_architecture()
         if not self.fields:
             layout.addWidget(text(self.t("此方法没有可调整的参数。")))
         layout.addLayout(form)
@@ -160,8 +156,6 @@ class ParameterDialog(QDialog):
     def _reset(self, name):
         for key, widget in self.fields.items():
             set_value(widget, PARAMETERS[name][key][1])
-        if "ae_dropout" in self.fields:
-            self.fields["ae_dropout"].setEnabled(value(self.fields["ae_architecture"]) == "global")
 
     def values(self):
         return {key: dimensions(widget) if key == "hidden_dims" else value(widget)
@@ -209,8 +203,6 @@ class RunTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             if key == "status":
                 return self.t(STATE_LABELS.get(cell, cell or "—"))
-            if key == "method" and row.get("ae_architecture") == "global":
-                return str(cell) + " · " + self.t("全局 AE")
             return "—" if cell is None else f"{cell:.5g}" if isinstance(cell, float) else str(cell)
         if role == Qt.ToolTipRole:
             return row.get("error") or row.get("W2_note") or ""
@@ -302,10 +294,10 @@ class MetricPlot(QWidget):
 
 
 class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
-    def __init__(self, workspace=None, *, load_default=True):
+    def __init__(self, workspace=None, *, load_default=True, startup=False):
         super().__init__()
         self.store = JobStore(workspace)
-        self.default_output_root = self.store.root / "outputs" if workspace is not None else Path(QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)) / "JINGWEI Benchmark"
+        self.default_output_root = self.store.root / "outputs" if workspace is not None else Path(QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)) / "jingwei"
         self.pool = QThreadPool.globalInstance()
         self._tasks = set()
         self.preview_data = None
@@ -324,6 +316,8 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self._environment_cache_hit = False
         self._environment_probe_count = 0
         self._environment_retry_used = False
+        self._startup_pending = startup
+        self._environment_error = None
         self._session_jobs = set()
         self.setup_ui()
         restored_input = self.restore_session(load_input=load_default)
@@ -368,6 +362,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         from .gui_cache import environment_identity, load_environment, save_environment
         self._environment_cancel.set()
         self._environment_cancel = threading.Event()
+        self._environment_error = None
         cancel = self._environment_cancel
         self._environment_generation += 1
         generation = self._environment_generation
@@ -405,20 +400,16 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             if generation != self._environment_generation:
                 return
             self._environment_checking = False
+            self._environment_error = message
             self.update_environment_labels()
-            self.show_error(message)
+            if not self._startup_pending:
+                self.show_error(message)
         self.background(inspect, done, error=failed)
 
     def apply_environment(self, result):
         self._environment_base_result = result
         states, gpu, self._gpu_name = result
         self.backend_states = {name: dict(state) for name, state in states.items()}
-        if value(self.fields["command"]) == "benchmark" and value(self.fields["evaluation_protocol"]) == "original-notebook":
-            from importlib.util import find_spec
-            installed = find_spec("sklearn") is not None
-            for name in ("missforest", "mice-pmm"):
-                self.backend_states[name] = {**self.backend_states[name], "backend": "python", "available": installed,
-                                             "reason": None if installed else "scikit-learn is missing"}
         self._environment_checking = False
         for name, box in self.method_checks.items():
             box.setEnabled(self.backend_states[name]["available"])
@@ -441,11 +432,6 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
 
     def mode_changed(self):
         benchmark = value(self.fields["command"]) == "benchmark"
-        for key in ("mask_rate", "mechanism", "training_mechanism", "training_mask_rate", "mask_level",
-                    "logistic_slope", "low_quantile", "high_quantile", "low_probability", "high_probability", "threshold_probability",
-                    "paper_probabilities", "allow_empty_marginals"):
-            self.fields[key].setEnabled(benchmark)
-        self.protocol_summary.setVisible(benchmark)
         set_value(self.fields["output_scale"], "working" if benchmark else "input")
         self.update_mask_controls()
 
@@ -523,8 +509,6 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
     def input_options(self):
         keys = ("orientation", "layer", "index_column", "header", "missing_values", "scale", "transform", "max_dense_mb")
         options = {key: value(self.fields[key]) for key in keys}
-        if value(self.fields["command"]) == "benchmark" and value(self.fields["evaluation_protocol"]) == "original-notebook":
-            options["evaluation_protocol"] = "original-notebook"
         return options
 
     def signature(self):
@@ -657,8 +641,8 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         for key in ("rscript", "r_library", "naguider_source", "dreamai_source"):
             config[key] = config[key] or None
         config["repeats"] = 1
-        if config["command"] == "impute":
-            config["evaluation_protocol"] = "fair"
+        config["evaluation_protocol"] = "fair"
+        config["seed"] = 0
         config["w2_features"] = self.feature_selection
         if not config["methods"]:
             raise ValueError(self.t("至少选择一种方法"))
@@ -784,7 +768,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         paths = [("任务", folder / "launch.log")]
         if 0 <= selected < len(info["runs"]):
             row = info["runs"][selected]
-            path = results / f"repeat_{row['repeat']:03d}/{row['method']}/run.log"
+            path = results / f"repeat_{row.get('repeat', 0):03d}/{row['method']}/run.log"
             if row.get("error"):
                 sections.append(str(row["error"]))
         else:
@@ -847,7 +831,6 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         if not self.selected_job:
             return
         info = self.store.info(self.selected_job)
-        set_value(self.fields["evaluation_protocol"], info["config"].get("evaluation_protocol", "fair"))
         if "mice_backend" not in info["config"] and any(
                 name in ("mice", "mice-pmm") for name in info["config"]["methods"]):
             set_value(self.fields["mice_backend"], "r")
@@ -910,7 +893,7 @@ def launch(workspace=None):
     prepare_standard_streams()
     from .windows_identity import set_process_app_id, apply_application_icon
     set_process_app_id()
-    app = QApplication.instance() or QApplication(["JINGWEI Benchmark"])
+    app = QApplication.instance() or QApplication(["jingwei"])
     apply_application_icon(app)
     store = JobStore(workspace)
     lock = QLockFile(str(store.root / "desktop.lock"))
@@ -918,8 +901,10 @@ def launch(workspace=None):
         language = read_json(store.root / "ui.json", {}).get("language", "zh")
         QMessageBox.information(None, "JINGWEI", translate(language, "这个工作目录已有 JINGWEI 窗口在运行。"))
         return 1
-    window = BenchmarkWindow(workspace)
-    window.show()
+    from .gui_startup import StartupGate
+    window = BenchmarkWindow(workspace, startup=True)
+    gate = StartupGate(window)
+    gate.start()
     code = app.exec()
     lock.unlock()
     return code

@@ -20,7 +20,7 @@ class DCAEImputer(pl.LightningModule):
         batch_size=64,
         supervision_mask_tensor=None,
         num_workers=0,
-        ae_architecture="native",
+        ae_architecture="global",
         ae_dropout=.1,
     ):
         super().__init__()

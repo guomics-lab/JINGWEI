@@ -19,7 +19,7 @@ from scipy.stats import pearsonr, spearmanr
 from .data_io import load_matrix, write_predictions
 from .methods import METHODS, availability, canonical_name
 from .metrics import imputation_metrics, wasserstein_distance_2
-from .protocol import protocol_masks, uses_mask_rate
+from .protocol import ORIGINAL_MECHANISM, protocol_masks, uses_mask_rate
 from .platforms import resolve_device
 from .runtime import python_command
 from .presets import preset_parameters
@@ -145,6 +145,10 @@ def _report(folder, results, methods, repeats, benchmark, notebook=False):
         "MSE/MAE/RMSE/NRMSE/correlations use exactly the evaluation-hidden entries. "
         "MSE is RMSE squared, in squared working-scale units."
     )
+    if frame.get("n_excluded", pd.Series(dtype=float)).fillna(0).gt(0).any() and not notebook:
+        text += (" Original-repository MNAR excludes the shared columns with no observations "
+                 "after evaluation masking, as in the source notebook. n_held_out, n_evaluated "
+                 "and n_excluded record this scope; excluded columns remain missing in exports.")
     if notebook:
         text = ("Historical notebook replay: first CSV column removed unconditionally; log2 of positive values; "
                 "float32 statistics fitted before masking; one original get_mask draw, no second training mask. "
@@ -182,7 +186,8 @@ def run_experiment(args):
     overrides = {canonical_name(k): v for k, v in overrides.items()}
     notebook = args.command == "benchmark" and getattr(args, "evaluation_protocol", "fair") == "original-notebook"
     if "jingwei-dcae" in methods:
-        architecture = overrides.get("jingwei-dcae", {}).get("ae_architecture", getattr(args, "ae_architecture", "native"))
+        architecture = overrides.get("jingwei-dcae", {}).get("ae_architecture",
+            getattr(args, "ae_architecture", None) or ("native" if notebook else "global"))
         if architecture not in ("native", "global"):
             raise ValueError("AE architecture must be native or global")
         if notebook and architecture != "native":
@@ -252,7 +257,7 @@ def run_experiment(args):
         "observed_count": int(data.observed.sum()),
         "evaluation_scale": data.scale,
         "input_scale": args.scale,
-        "mask_protocol_version": 2,
+        "mask_protocol_version": 3,
         "effective_protocol": ({"name": "original-notebook", "source_revision": "98686b54fdb9918a4d4cc9d99ac4880a6dadcefe",
             "seed": args.seed, "repeats": 1, "input": "raw CSV; first column discarded",
             "preprocessing": "log2 positives; original float32 pre-mask mean/std",
@@ -261,7 +266,8 @@ def run_experiment(args):
             "scoring": "exclude empty columns and nonfinite predictions; record excluded counts",
             "rng": "original method order; Python/NumPy/Torch streams carried between workers"} if notebook else
             {"name": "fair", "evaluation": args.mechanism,
-             "training": args.training_mechanism or args.mechanism,
+             "training": "method-owned; no platform training mask",
+             "platform_mask_count": 1,
              "normalization": "training-available observations only"}),
         "device": device,
         "csv_detection": data.csv_detection,
@@ -280,7 +286,6 @@ def run_experiment(args):
         mask_sequence, model_sequence = seed_sequence.spawn(2)
         mask_seed = int(mask_sequence.generate_state(1)[0] % (2**31 - 1))
         model_seed = int(model_sequence.generate_state(1)[0] % (2**31 - 1))
-        training_mechanism = args.training_mechanism or args.mechanism
         if notebook:
             from .notebook_protocol import notebook_masks
             masks, mask_metadata = notebook_masks(data)
@@ -291,13 +296,12 @@ def run_experiment(args):
             data.observed,
             working_values=truth,
             mechanism=args.mechanism,
-            training_mechanism=args.training_mechanism,
             evaluation_rate=(
                 (args.mask_rate if uses_mask_rate(args.mechanism, args.paper_probabilities) else None)
                 if args.command == "benchmark"
                 else 0
             ),
-            training_rate=(args.training_mask_rate if uses_mask_rate(training_mechanism, args.paper_probabilities) else None),
+            training_rate=0,
             seed=mask_seed,
             preserve_marginals=not args.allow_empty_marginals,
             level=args.mask_level,
@@ -317,6 +321,26 @@ def run_experiment(args):
               f"available={int(masks.available.sum())} | training={int(masks.training_hidden.sum())} | "
               f"empty features={int((~masks.available.any(axis=0)).sum())}", flush=True)
         repeat_dir.mkdir()
+        original_empty_policy = not notebook and args.mechanism == ORIGINAL_MECHANISM
+        valid_columns = masks.available.any(axis=0) if original_empty_policy else np.ones(truth.shape[1], dtype=bool)
+        score_scope = masks.evaluation_hidden & valid_columns[None, :]
+        if args.command == "benchmark" and not score_scope.any():
+            raise ValueError("no evaluable holdouts remain on features observed after evaluation masking")
+        if original_empty_policy:
+            dump_json(repeat_dir / "feature_scope.json", {
+                "policy": "original notebook: exclude features empty after evaluation masking",
+                "excluded_feature_ids": list(data.frame.columns[~valid_columns]),
+                "empty_after_evaluation": int((~valid_columns).sum()),
+                "empty_after_training": int((~masks.training_visible.any(axis=0)).sum()),
+                "n_held_out": int(masks.evaluation_hidden.sum()),
+                "n_evaluated": int(score_scope.sum()),
+                "n_excluded": int((masks.evaluation_hidden & ~valid_columns[None, :]).sum()),
+                "export": "excluded features are NaN; they are not estimated or scored",
+            })
+            if (~valid_columns).any():
+                print(f"Feature scope | excluded empty features={int((~valid_columns).sum())} | "
+                      f"evaluated={int(score_scope.sum())} | excluded holdouts="
+                      f"{int(masks.evaluation_hidden.sum()-score_scope.sum())}", flush=True)
         np.savez_compressed(
             repeat_dir / "masks.npz",
             observed=masks.observed,
@@ -349,6 +373,7 @@ def run_experiment(args):
                 "evaluation_rate": mask_metadata["evaluation"]["actual_rate"],
                 "training_rate": mask_metadata["training"]["actual_rate"],
                 "evaluation_scale": data.scale,
+                "zero_cols": int((~valid_columns).sum()) if original_empty_policy else 0,
             }
             cancel_file = getattr(args, "cancel_file", None)
             if cancel_file and Path(cancel_file).exists():
@@ -367,7 +392,7 @@ def run_experiment(args):
                     "hidden_dims": args.hidden_dims,
                     "learning_rate": args.learning_rate,
                     "mask_weight": args.mask_weight,
-                    "ae_architecture": getattr(args, "ae_architecture", "native"),
+                    "ae_architecture": getattr(args, "ae_architecture", None) or ("native" if notebook else "global"),
                     "evaluation_protocol": "original-notebook" if notebook else "fair",
                     **preset_parameters("original-benchmark" if notebook else getattr(args, "jingwei_preset", "standard"), method),
                     **overrides.get(method, {}),
@@ -386,6 +411,7 @@ def run_experiment(args):
                     "source_dir": args.naguider_source,
                     "dreamai_source": args.dreamai_source,
                     "notebook_rng_input": notebook_rng_input,
+                    "exclude_empty_features": original_empty_policy,
                 }
                 print(f"[{repeat+1}/{repeats}] {method}", flush=True)
                 result = _run_worker(payload, args.timeout, cancel_file)
@@ -401,7 +427,7 @@ def run_experiment(args):
                                 from .notebook_protocol import notebook_score_mask
                                 score_mask = notebook_score_mask(truth, prediction, masks)
                             else:
-                                score_mask = masks.evaluation_hidden
+                                score_mask = score_scope
                             result["n_held_out"] = int(masks.evaluation_hidden.sum())
                             result["n_excluded"] = int(masks.evaluation_hidden.sum() - score_mask.sum())
                             result.update(
@@ -452,7 +478,11 @@ def run_experiment(args):
                             positions = data.frame.columns.get_indexer(
                                 selected_features
                             )
+                            result["W2_excluded_empty_features"] = int((~valid_columns[positions]).sum())
+                            positions = positions[valid_columns[positions]]
                             complete_rows = data.observed[:, positions].all(axis=1)
+                            if len(positions) == 0:
+                                complete_rows[:] = False
                             result["W2_n_samples"] = int(complete_rows.sum())
                             result["W2_n_features"] = len(positions)
                             result["W2_n_evaluated"] = int(
@@ -481,14 +511,18 @@ def run_experiment(args):
                                 result["W2_note"] = (
                                     "selected complete reference matrix contains no evaluation-hidden entries"
                                 )
+                        exported = prediction.copy()
+                        if original_empty_policy:
+                            exported[:, ~valid_columns] = np.nan
                         write_predictions(
                             data,
-                            prediction,
+                            exported,
                             folder,
                             method=method,
                             input_scale=args.scale,
                             output_scale=args.output_scale,
                             allow_nonfinite=notebook,
+                            excluded_features=~valid_columns if original_empty_policy else None,
                         )
                     except Exception as exc:
                         result.update(

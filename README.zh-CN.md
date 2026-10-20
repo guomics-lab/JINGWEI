@@ -114,6 +114,10 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 ### 可用参数
 
+当前源码已直接更新 **DCAE 实现**，采用显式输入掩码、全局瓶颈和全连接解码器。
+架构、Python API 和 Alzheimer 评测命令见[实现说明](software/benchmark/AE_ARCHITECTURE.md)。
+目前仅更新 Alzheimer 的结果数值，其他数据集等待后续重评。Windows 1.0.4 构建包含新版 DCAE；已发布的 Python 包及旧安装包保持原状。
+
 <details>
 <summary>展开全部训练参数</summary>
 
@@ -172,16 +176,13 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 [**下载 Windows 安装包（.exe）**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.3/JINGWEI-Benchmark-Windows-Setup.exe) · [安装说明](software/benchmark/RELEASE-1.0.3.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.3)
 
-安装一次后，从开始菜单打开 **JINGWEI Benchmark**。Python、R、conda 及各方法依赖均已打包，无需另装。Windows 原生界面支持 **中文 / English**，默认加载内置的 `data/Alzheimer.csv`。
+上方链接为已发布的 **1.0.3** 安装包。本地 **1.0.5** 构建已更名为 **jingwei**，Python、R 及各方法依赖均已打包。Windows 原生界面支持 **中文 / English**，默认加载内置的 `data/Alzheimer.csv`。
 
-选择数据、方法、评测方案、输出目录和设备后，点击 **开始**。GUI **每次只运行一次**，已删除重复次数选项。**日志**实时显示进度；启动时结果为空，通过 **打开任务…**手动查看。表单设置和环境检查缓存独立保留。
+选择数据、方法和输出目录后，点击 **开始**。运行设置仅保留 **任务、缺失机制、掩蔽比例** 三项；设备及模型参数在 **高级设置** 中。GUI 每次运行一次。**日志**实时显示进度；启动时结果为空，通过 **打开任务…** 手动查看已保存结果。计算环境检查在主界面出现前完成，有效缓存和表单设置会复用。安装许可使用纯文本。
 
-- **原 notebook 回放**：恢复旧 CSV 预处理、`CSVDataset.get_mask()`、单次掩蔽、原方法和评分流程。它会无条件丢弃第一列，并使用掩蔽前统计量。
-- **公平评测**：支持常规 CSV／AnnData，先统一构造评测掩蔽，再从剩余观测值构造训练掩蔽；标准化不使用评测真值。此前的自定义分位数机制单独标注。
+平台只统一构造一次测试掩蔽，将同一份掩蔽后的数据交给所有方法，不再额外构造训练掩蔽。各模型自行完成训练、验证及去噪；测试真值不传给模型。原仓库 MNAR 保留 `CSVDataset.get_mask()` 的公式及固定概率，因此比例显示 **自动**，实际比例由数据决定。阿尔兹海默更新结果以当前 GUI 任务导出为准，旧 notebook 结果记录已移除。详见[测试报告](software/benchmark/SE_TESTS.md)。
 
-新表单默认使用原 notebook 回放；已有配置保留其评测方案。**恢复原代码不等于旧分数全部重现**。阿尔兹海默数据的掩蔽数量一致，9 个旧 MSE 中 6 个与原显示精度一致；MF、DAE、DCAE 仍有差异。另通过本机直接执行旧函数交叉检查神经方法。结果和差异见[回放说明](software/benchmark/NOTEBOOK_REPLAY.md)和[测试报告](software/benchmark/SE_TESTS.md)。
-
-CLI 默认评测 **全部 35 种方法、单次运行**，每种方法默认超时 **30 分钟**。CLI 仍可显式指定多次公平评测。GUI 默认勾选 DMF 和 DCAE。历史回放使用原 Python 线性 MICE；公平方案另有 Python／R MICE-PMM 及其他 R 方法。详见[用户指南](software/benchmark/README.md)。
+CLI 默认评测 **全部 35 种方法、单次运行**，每种方法默认超时 **30 分钟**。CLI 仍可显式指定多次公平评测。GUI 默认勾选 DMF 和 DCAE，方法列表中另有 Python／R MICE-PMM 及其他 R 方法。详见[用户指南](software/benchmark/README.md)。
 
 | 平台 | 软件 | 计算设备 |
 | --- | --- | --- |

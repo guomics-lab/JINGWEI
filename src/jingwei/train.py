@@ -1,5 +1,4 @@
 import argparse
-import os
 import time
 from pathlib import Path
 
@@ -13,6 +12,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from .dcae import DCAEImputer
 from .datasets import CSVDataset
 from .dmf import DMFImputer
+from .platforms import add_device_arguments, resolve_device
 
 
 class ImputationTrainer:
@@ -43,6 +43,7 @@ class ImputationTrainer:
         common_params = {
             "full_data_tensor": data_tensor,
             "full_mask_tensor": mask_tensor,
+            "supervision_mask_tensor": dataset.supervision_mask,
             "batch_size": self.args.batch_size,
         }
 
@@ -68,6 +69,8 @@ class ImputationTrainer:
                 num_decoder_blocks=self.args.num_decoder_blocks,
                 dilation=self.args.dilation,
                 learning_rate=self.args.learning_rate,
+                ae_architecture=getattr(self.args, "ae_architecture", "global"),
+                ae_dropout=getattr(self.args, "ae_dropout", .1),
             )
         else:
             raise ValueError(f"Unknown method: {self.args.method}")
@@ -75,33 +78,9 @@ class ImputationTrainer:
         return model
 
     def setup_device(self):
-        if self.args.gpu_id is not None:
-            os.environ["CUDA_VISIBLE_DEVICES"] = str(self.args.gpu_id)
-            self.device = "cuda"
-            self.devices = 1
-            print(f"Using GPU {self.args.gpu_id}")
-        elif self.args.device == "cuda":
-            if torch.cuda.is_available():
-                self.device = "cuda"
-                self.devices = 1
-                print("Using CUDA device")
-            else:
-                print("CUDA not available, falling back to CPU")
-                self.device = "cpu"
-                self.devices = "auto"
-        elif self.args.device == "cpu":
-            self.device = "cpu"
-            self.devices = "auto"
-            print("Using CPU")
-        else:
-            if torch.cuda.is_available():
-                self.device = "cuda"
-                self.devices = 1
-                print("Auto-detected CUDA device")
-            else:
-                self.device = "cpu"
-                self.devices = "auto"
-                print("Auto-detected CPU")
+        self.device = resolve_device(self.args.device, self.args.gpu_id)
+        self.devices = 1
+        print(f"Using {self.device}")
 
     def setup_callbacks(self, dataset_name):
         callbacks = []
@@ -155,11 +134,6 @@ class ImputationTrainer:
         )
 
         callbacks = self.setup_callbacks(dataset_name)
-
-        if self.args.device == "auto":
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        else:
-            device = self.args.device
 
         trainer = pl.Trainer(
             max_epochs=self.args.max_epochs,
@@ -238,6 +212,9 @@ def parse_arguments():
     parser.add_argument("--embedding-dim", type=int, default=64, help="Embedding dimension for DMF")
 
     parser.add_argument("--latent-dim", type=int, default=64, help="Latent dimension for DCAE (ae_dim)")
+    parser.add_argument("--ae-architecture", choices=("native", "global"), default="global",
+                        help="Current DCAE by default; native explicitly selects the legacy convolutional architecture")
+    parser.add_argument("--ae-dropout", type=float, default=.1)
     parser.add_argument(
         "--num-encoder-blocks", type=int, default=2, help="Number of encoder blocks for DCAE"
     )
@@ -273,14 +250,7 @@ def parse_arguments():
     )
     parser.add_argument("--log-interval", type=int, default=50, help="Logging interval in steps")
     parser.add_argument("--progress-bar", action="store_true", help="Show progress bar during training")
-    parser.add_argument(
-        "--device",
-        type=str,
-        default="auto",
-        choices=["cpu", "cuda", "auto"],
-        help="Device to use for training",
-    )
-    parser.add_argument("--gpu-id", type=int, default=None, help="Specific GPU ID to use (0, 1, etc.)")
+    add_device_arguments(parser)
     return parser.parse_args()
 
 

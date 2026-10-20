@@ -8,7 +8,7 @@ from pathlib import Path
 
 def main(*, desktop=None):
     if desktop is None:
-        desktop = not (getattr(sys, "frozen", False) and Path(sys.executable).stem.lower() == "jingwei-benchmark")
+        desktop = not (getattr(sys, "frozen", False) and Path(sys.executable).stem.lower() in ("jingwei-benchmark", "jingwei-cli"))
     multiprocessing.freeze_support()
     from jingwei_benchmark.runtime import prepare_standard_streams
     prepare_standard_streams()

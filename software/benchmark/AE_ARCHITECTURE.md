@@ -1,104 +1,106 @@
-# Experimental global AE
+# DCAE implementation
 
-开发版新增可选的 **全局掩码 AE**，用于改进 DCAE 的重建路径。GUI 在
-**公平评测 → DCAE 参数 → AE 架构**选择；CLI 使用
-`--ae-architecture global`。默认 `native` 和原 notebook 回放保留原架构。
-这是源码开发功能，已发布的 V1.0.3 安装包不含此选项。
+当前源码已直接替换 DCAE 的实现：显式输入掩码、全局瓶颈和全连接解码器。
+Python API、CLI 与 GUI 中仍然只有原来的 DCAE 方法，不设置 Alzheimer 专用方法或预设。
+目前仅更新 Alzheimer 的实验结果，其他数据集数值保留，等待后续重新评测。
+Windows 1.0.5 构建包含此实现；已发布的 Python 包和旧安装包保持原状。
 
-The experimental `global` architecture uses two input channels: normalized
-abundance and the supplied observation mask. A genuine normalized zero is
-therefore distinct from an unavailable entry. Masked values are discarded
-before any learned operation.
+## Architecture
 
-Residual dilated convolutions encode each row. A flattened, fully connected
-bottleneck mixes information across the protein profile; a residual dense
-decoder produces a separate output for every protein. The output projection
-starts near the training-derived protein mean. Light dropout regularizes the
-bottleneck and decoder. No input-to-output identity shortcut bypasses the
-bottleneck. The auxiliary mask head reads the latent code, allowing its loss
-to update the encoder without directly constraining the reconstruction head.
-`--mask-weight 0` disables this auxiliary objective.
+`jingwei.models.DCAE`, `jingwei.DCAE` and `DCAEImputer` now use the updated
+architecture by default. The bundled benchmark uses the same implementation.
+Its version metadata is `global-ae-v1`; the method ID remains `jingwei-dcae`.
+There is no dataset detection or dataset-specific architecture selection.
 
-The observation mask is an input, so auxiliary mask prediction can exploit
-that information. Its accuracy is not evidence of identifying a biological
-MNAR process, and this comparison does not isolate the benefit of each component.
-Protein order still matters to the convolutional encoder; this is not a
-permutation-equivariant model. Fixed latent/hidden widths give parameter growth
-linear in the number of proteins. Configurations requiring more than 50 million
-parameters fail before allocating the network.
+Two channels contain standardized observed values and their explicit binary
+observation mask. Unavailable values are discarded before any learned
+operation; an observed normalized zero remains distinct from a missing zero.
+A 16-channel residual dilated-convolution encoder downsamples the profile.
+A flattened global bottleneck feeds a residual dense decoder with a separate
+output for each protein. There is no input-to-output identity shortcut.
+The mask head reads the shared latent vector. Dropout regularizes the bottleneck
+and decoder; the reconstruction projection starts near the training-derived
+protein mean. The input mask can facilitate the auxiliary task, so mask
+prediction does not identify a biological MNAR mechanism. Protein order still
+matters to the convolutional encoder.
 
-## Calling the model
+The current GUI configuration has 1,542 features, latent size 64, hidden width 256,
+two encoder/decoder blocks and dilation 2. It contains 1,489,372 parameters.
+Configurations requiring more than 50 million parameters are rejected before allocation.
+Existing convolutional-model checkpoints have different keys and cannot be
+loaded into the updated architecture. `LegacyDCAE` and explicit
+`ae_architecture="native"` remain only for historical comparisons.
 
-In the Windows source GUI, select **Fair benchmark**, highlight DCAE and open
-**Parameters**. Select **Global mask-aware AE (experimental)**. The architecture
-is recorded in job parameters, logs and metrics; results show a Global AE suffix.
-Historical replay rejects the new architecture instead of silently changing its
-model. Both the PyTorch and Lightning runners support CPU/CUDA; the macOS
-application policy remains CPU only.
+## Python and software
+
+```python
+from jingwei import DCAE, DCAEImputer
+
+network = DCAE(input_feature_dim=1542, ae_dim=64,
+               mask_predictor_hidden_dim=256,
+               num_encoder_blocks=2, num_decoder_blocks=2, dilation=2)
+reconstruction, mask_logits = network(normalized_values, observation_mask)
+
+imputer = DCAEImputer(
+    full_data_tensor=normalized_values,
+    full_mask_tensor=input_mask,
+    supervision_mask_tensor=supervision_mask,
+    ae_dim=64, mask_predictor_hidden_dim=256,
+    num_encoder_blocks=2, num_decoder_blocks=2, dilation=2,
+    learning_rate=0.001, lambda_mask=0.5, batch_size=64,
+)
+```
+
+Supply normalization fitted on the training observations only. The supervision
+mask includes training-corrupted observations and excludes evaluation targets.
+Both PyTorch and Lightning runners preserve supplied observations and support
+CPU/CUDA. macOS remains CPU only. In the source GUI, select DCAE as usual;
+there is no extra architecture selector or Alzheimer-specific preset.
 
 ```bash
 jingwei-benchmark benchmark --input data.csv --methods jingwei-dcae \
-  --evaluation-protocol fair --ae-architecture global \
-  --max-epochs 300 --device cuda --output results/global-ae
+  --evaluation-protocol fair --max-epochs 50 --device cuda --output results/dcae
 ```
 
-This command uses normal CLI defaults for the remaining parameters. The
-diagnostic architecture comparison below instead uses latent dimension 256,
-mask-head/decoder width 128, three encoder and decoder blocks, dropout 0.1,
-AdamW learning rate 0.00005, weight decay 0.00001, mask weight 0.5, and one
-full-row batch per epoch (batch size 1024). These are experimental settings,
-not a universally recommended training duration. Method JSON or GUI parameters
-can set them explicitly.
+This is a single run with the chosen settings. The current AD GUI reference
+configuration and its scope are described below.
 
-## Validation protocol
+## Alzheimer GUI reference
 
-The development comparison reuses the Alzheimer outer evaluation mask, but
-both architectures fit normalization only to their training observations.
-It retains that example's first-column removal and positive-value log2
-preprocessing (210 samples × 1541 proteins). Normal fair CLI import can retain
-all numeric columns; the example command above therefore does not by itself
-recreate this exact diagnostic mask.
-It therefore differs from historical replay, which used pre-mask statistics.
-An inner 20% MCAR mask is drawn exclusively from outer-training observations;
-it leaves at least one fitting observation per nonempty protein column. This
-inner mask is excluded from normalization and gradient supervision. A second
-20% corruption of the fitting entries supplies denoising inputs.
+The updated AD manuscript results use the actual Windows 1.0.5 GUI job runner,
+with its saved configuration: original-repository MNAR, GUI base seed 0, one run,
+50 epochs, batch size 64, latent dimension 64, hidden dimensions 256 and 128,
+learning rate 0.001 and mask weight 0.5. This records the selected GUI settings;
+a fresh form can use a different missingness selection.
 
-Each architecture is trained for at most 2000 epochs and checked every 50
-epochs. The best inner-validation epoch determines a fresh fit on all
-outer-training observations. Outer targets are loaded only by the separate
-final scoring process after all fits finish. Model/inner-mask seeds 0, 1 and 2
-are paired across architectures. A protein-mean baseline uses the same available
-observations. This is an exploratory comparison on one fixed outer mask; its
-MCAR inner validation, dataset and initialization scope limit generalization.
+Automatic import keeps all 1,542 numeric protein columns. There are 255,165
+initial observations, 229,386 test holdouts and 25,779 method-input observations.
+The platform creates one shared test mask and no training mask. Sixteen empty
+columns are excluded from the shared score, leaving 229,311 test targets.
+Each method owns its training; the JINGWEI reference run has no additional
+corruption, inner-validation epoch selection or refit. Normalization uses only
+the remaining observations. No standard deviation is reported for one run.
 
-## Alzheimer measurements
+| Method | GUI MSE | GUI worker time (s) |
+| --- | ---: | ---: |
+| DMF | 0.681597 | 4.499 |
+| DCAE | 0.704898 | 7.323 |
+| MissForest | 0.589278 | 377.880 |
+| KNN | 0.623089 | 2.001 |
+| MICE-PMM | 0.674742 | 12.820 |
+| MIN | 2.769302 | 0.650 |
+| PIMMS DAE | 0.677432 | 9.470 |
+| PIMMS VAE | 0.614723 | 25.608 |
 
-All runs score the same 229,401 held-out entries. Measurements on 2026-10-19:
+These are the software's current results under this configuration. DMF/DCAE do
+not outperform MissForest here. All other dataset numerical results remain
+unchanged. Old notebook outputs and the superseded AD-specific selection/refit
+comparison are removed as reference records. Old AD ablation/order tables are
+removed from the revised manuscript, rather than populated with unmeasured values.
 
-| Seed | Native AE MSE | Global AE MSE | Native epochs | Global epochs |
-| --- | ---: | ---: | ---: | ---: |
-| 0 | 0.679168 | 0.543732 | 2000 | 300 |
-| 1 | 0.708301 | 0.539789 | 2000 | 250 |
-| 2 | 0.687146 | 0.538422 | 2000 | 300 |
-| Mean | **0.691538** | **0.540648** | | |
-| Sample SD across seeds | 0.015055 | 0.002757 | | |
-
-The global variant reduces mean MSE by **21.82%** in this comparison. The
-protein-mean baseline is **0.632483**. Parameter counts are 719,798 for native
-DCAE and 1,359,850 for the global variant. The comparison changes the complete
-architecture, including its mask head and initialization; it is not a component
-ablation. Native selections reached the 2000-epoch budget, so the result does
-not establish native performance with a larger budget.
-
-The earlier 1500–3000 epoch diagnostic used historical pre-mask statistics and
-one mask. This experiment adds training corruption and fits normalization after
-holdouts, which is why its native baseline is recomputed. These measurements
-support this optional model on one dataset/mask; they do not establish broader
-superiority or reproduce a historical manuscript table.
-
-Local evidence is retained under `results/se-qa/ae-design/`: the fitting script,
-inner validation histories, source/input settings, selected weights, separate
-outer scorer and `confirmation/outer-scores.csv`. No dependency additions are
-required. The published Python package and the notebook snapshot are separate
-from this development variant.
+Local evidence: `results/gui-ad-reference-20261020/`, including the complete GUI
+task, configuration, masks, predictions, versions and independently checked
+metrics. The task can be reopened with **Open task…**. GUI `time_s` covers worker
+initialization, algorithm execution and prediction serialization. Timings depend
+on hardware. Sample W2 remains undefined because no reference sample is complete
+on the retained common feature set.

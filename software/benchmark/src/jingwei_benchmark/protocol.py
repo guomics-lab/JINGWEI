@@ -235,11 +235,22 @@ def protocol_masks(
         "evaluation",
     )
     available = observed & ~evaluation
-    training = draw(
-        available,
-        training_mechanism or mechanism,
-        training_rate,
-        training_seed,
-        "training",
-    )
+    if training_rate == 0:
+        # Benchmark orchestration always takes this path. The second-mask
+        # utility remains available to an explicit model-owned training caller.
+        training = np.zeros_like(observed)
+        metadata["training"] = {
+            "mechanism": None, "eligible_count": int(available.sum()),
+            "hidden_count": 0, "actual_rate": 0.0, "requested_rate": 0.0,
+            "probability_mode": "not-applied", "random_seed": None,
+            "rule": "no platform training mask; each method owns its training procedure",
+        }
+    else:
+        training = draw(
+            available,
+            training_mechanism or mechanism,
+            training_rate,
+            training_seed,
+            "training",
+        )
     return BenchmarkMasks(observed, evaluation, training), metadata

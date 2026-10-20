@@ -56,10 +56,10 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
             num_decoder_blocks=params.get("decoder_blocks", 2),
             dilation=params.get("dilation", 2),
             learning_rate=params.get("learning_rate", 0.001),
-            ae_architecture=params.get("ae_architecture", "native"),
+            ae_architecture=params.get("ae_architecture", "global"),
             ae_dropout=params.get("ae_dropout", .1),
         )
-        print(f"AE architecture={params.get('ae_architecture', 'native')} | parameters={sum(p.numel() for p in model.parameters())}", flush=True)
+        print(f"AE architecture={params.get('ae_architecture', 'global')} | parameters={sum(p.numel() for p in model.parameters())}", flush=True)
     class TrainingDeviceRecorder(pl.Callback):
         def on_train_start(self, trainer, module):
             self.device = next(module.parameters()).device
@@ -92,7 +92,8 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
     metadata = {
         "device": device,
         "training_device": str(recorder.device),
-        "training_protocol": "fixed second mask; supervision on all remaining observations",
+        "training_protocol": ("fixed model-supplied mask; supervision on remaining observations" if training_hidden.any()
+                              else "method-owned training on common evaluation-corrupted input; no platform training mask"),
         "normalization": "per-feature mean/std fitted after evaluation masking",
     }
     actual_device = next(model.parameters()).device
@@ -103,8 +104,8 @@ def run_jingwei_lightning(name, matrix, training_hidden, params, *, device, seed
                     initialization_s=initialized-started, training_s=trained-initialized, prediction_s=finished-trained)
     metadata["model_parameters"] = sum(parameter.numel() for parameter in model.parameters())
     if name == "jingwei-dcae":
-        metadata.update(ae_architecture=params.get("ae_architecture", "native"),
+        metadata.update(ae_architecture=params.get("ae_architecture", "global"),
                         model_architecture_version=getattr(model.model, "architecture_version", "native-dcae-v1"),
-                        ae_dropout=params.get("ae_dropout", .1) if params.get("ae_architecture") == "global" else 0.,
-                        mask_head_input="latent" if params.get("ae_architecture") == "global" else "reconstruction")
+                        ae_dropout=params.get("ae_dropout", .1) if getattr(model.model, "mask_aware", False) else 0.,
+                        mask_head_input="latent" if getattr(model.model, "mask_aware", False) else "reconstruction")
     return prediction, metadata

@@ -101,3 +101,19 @@ def test_nonfinite_timeout_is_rejected_before_launch(tmp_path, capsys, monkeypat
     assert main(['benchmark', '--input', str(tmp_path / 'input.csv'), '--output', str(tmp_path / 'out'),
                  '--timeout=' + timeout]) == 1
     assert 'timeout' in capsys.readouterr().err
+
+
+def test_anndata_without_X_reports_a_controlled_error_and_can_use_a_layer(tmp_path, capsys):
+    ad=pytest.importorskip('anndata')
+    source=tmp_path/'layer-only.h5ad'
+    values=np.arange(1.,13.).reshape(3,4)
+    data=ad.AnnData(shape=values.shape)
+    data.layers['abundance']=values
+    data.write_h5ad(source)
+    assert main(['inspect','--input',str(source)])==1
+    error=capsys.readouterr().err
+    assert 'X' in error and '--layer' in error and 'Traceback' not in error
+    assert main(['inspect','--input',str(source),'--layer','abundance'])==0
+    result=json.loads(capsys.readouterr().out)
+    assert (result['samples'],result['features'])==(3,4)
+    np.testing.assert_array_equal(load_matrix(source,layer='abundance',transform='none').frame,values)

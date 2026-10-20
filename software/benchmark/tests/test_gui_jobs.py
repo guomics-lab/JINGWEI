@@ -65,6 +65,13 @@ def test_desktop_cli_parity_history_and_export(tmp_path):
         assert "results/repeat_000/masks.npz" in bundle.namelist()
 
 
+def test_omitted_repeat_setting_uses_the_single_run_cli_default(tmp_path):
+    store=JobStore(tmp_path/'desktop')
+    job=store.submit(fixture(tmp_path),{'command':'benchmark','methods':['mean'],'device':'cpu'})
+    info=wait_job(store,job)
+    assert info['state']=='completed' and info['done']==info['expected']==1
+
+
 def test_cancel_stops_owned_worker_and_retains_cancelled_status(tmp_path):
     store = JobStore(tmp_path / "desktop")
     job_id = store.submit(fixture(tmp_path), {

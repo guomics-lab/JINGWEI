@@ -79,14 +79,14 @@ def test_global_inference_with_same_weights_agrees_on_cpu_and_cuda():
 
 
 def test_legacy_architecture_factory_and_invalid_selection():
-    from jingwei_benchmark._native.models import DCAE
-    assert isinstance(build_dcae('native',input_feature_dim=17,ae_dim=4),DCAE)
+    from jingwei_benchmark._native.models import LegacyDCAE
+    assert isinstance(build_dcae('native',input_feature_dim=17,ae_dim=4),LegacyDCAE)
     with pytest.raises(ValueError,match='unknown AE architecture'):
         build_dcae('unsupported',input_feature_dim=17,ae_dim=4)
 
 
 def test_native_factory_preserves_initial_weights_and_outputs_exactly():
-    from jingwei_benchmark._native.models import DCAE
+    from jingwei_benchmark._native.models import LegacyDCAE as DCAE
     torch.manual_seed(31)
     reference=DCAE(17,4).eval()
     torch.manual_seed(31)
@@ -161,15 +161,15 @@ def test_gui_global_selection_and_reset(monkeypatch,tmp_path):
     monkeypatch.setattr(BenchmarkWindow,'refresh_environment',lambda self:None)
     window=BenchmarkWindow(tmp_path/'desktop',load_default=False)
     dialog=ParameterDialog('jingwei-dcae',{'ae_architecture':'global'},window)
-    assert dialog.values()['ae_architecture']=='global'
+    assert 'ae_architecture' not in dialog.values()
     assert dialog.fields['ae_dropout'].isEnabled()
     dialog._reset('jingwei-dcae')
-    assert value(dialog.fields['ae_architecture'])=='native'
-    assert not dialog.fields['ae_dropout'].isEnabled()
+    assert 'ae_architecture' not in dialog.fields
+    assert dialog.fields['ae_dropout'].isEnabled()
     from jingwei_benchmark.gui import RunTableModel
     table=RunTableModel(window.t)
     table.replace([{'method':'jingwei-dcae','ae_architecture':'global'}],['method'])
     assert 'jingwei-dcae' in table.data(table.index(0,0))
-    assert table.data(table.index(0,0)) != 'jingwei-dcae'
+    assert table.data(table.index(0,0)) == 'jingwei-dcae'
     dialog.close()
     window.close()

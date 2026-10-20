@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import json
+import math
 import os
 import re
 import hashlib
@@ -30,6 +31,34 @@ def read_json(path, default=None):
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {} if default is None else default
+
+
+def _validate_task_records(config, runs):
+    """Reject damaged saved records before widgets or plotting consume them."""
+    if (not isinstance(config, dict)
+            or not isinstance(config.get("methods"), list)
+            or not all(isinstance(name, str) and name for name in config["methods"])
+            or type(config.get("repeats", 1)) is not int or config.get("repeats", 1) < 1
+            or not isinstance(runs, list)):
+        raise ValueError("任务配置无效")
+    if len(config["methods"]) * config.get("repeats", 1) > 2147483647:
+        raise ValueError("任务配置无效")
+    for row in runs:
+        if (not isinstance(row, dict)
+                or not isinstance(row.get("method"), str)
+                or not re.fullmatch(r"[A-Za-z0-9_-]+", row["method"])
+                or not isinstance(row.get("status"), str)
+                or type(row.get("repeat", 0)) is not int or row.get("repeat", 0) < 0):
+            raise ValueError("任务结果记录无效")
+        for key in ("MSE", "RMSE", "MAE", "NRMSE", "Pearson", "Spearman", "W2", "time_s"):
+            value = row.get(key)
+            if value is not None:
+                try:
+                    valid = type(value) in (int, float) and math.isfinite(value)
+                except OverflowError:
+                    valid = False
+                if not valid:
+                    raise ValueError("任务结果指标无效")
 
 
 def make_argv(config, input_path, output_path, cancel_file=None, parameter_file=None):
@@ -68,12 +97,10 @@ def make_argv(config, input_path, output_path, cancel_file=None, parameter_file=
         raise ValueError("请选择具体的插补方法")
     [canonical_name(name) for name in args.methods]
     validate_device(args.device, args.gpu_id)
-    training_mechanism = args.training_mechanism or args.mechanism
     notebook = mode == "benchmark" and args.evaluation_protocol == "original-notebook"
-    if not notebook and ((uses_mask_rate(training_mechanism, args.paper_probabilities) and not 0 <= args.training_mask_rate <= 1)
-            or (mode == "benchmark" and uses_mask_rate(args.mechanism, args.paper_probabilities) and not 0 < args.mask_rate < 1)):
-        raise ValueError("评测掩蔽率应在 0 和 1 之间；训练掩蔽率应在 0 和 1 之间（可包含端点）")
-    custom = set() if notebook else {args.mechanism, training_mechanism} - {"mcar", ORIGINAL_MECHANISM}
+    if not notebook and mode == "benchmark" and uses_mask_rate(args.mechanism, args.paper_probabilities) and not 0 < args.mask_rate < 1:
+        raise ValueError("评测掩蔽率应在 0 和 1 之间")
+    custom = set() if notebook else {args.mechanism} - {"mcar", ORIGINAL_MECHANISM}
     if custom and not 0 <= args.low_quantile < args.high_quantile <= 1:
         raise ValueError("分位数应满足 0 ≤ 低分位 < 高分位 ≤ 1")
     if custom and (args.low_probability < args.high_probability or args.logistic_slope > 0):
@@ -118,6 +145,7 @@ class JobStore:
     def attach(self, directory):
         """Open saved results as data, without executing recorded commands."""
         folder = Path(directory).resolve()
+        cli_job = False
         if folder.name == "results" and (folder.parent / "request.json").is_file():
             folder = folder.parent
         request = read_json(folder / "request.json")
@@ -129,16 +157,34 @@ class JobStore:
                 raise ValueError("任务配置无效")
         elif (folder / "manifest.json").is_file():
             manifest = read_json(folder / "manifest.json")
-            if not isinstance(manifest.get("config"), dict) or not isinstance(manifest.get("runs"), list):
+            if not isinstance(manifest, dict):
                 raise ValueError("任务配置无效")
+            _validate_task_records(manifest.get("config"), manifest.get("runs"))
             job = hashlib.sha256(str(folder).encode("utf-8")).hexdigest()[:32]
-            self._cli_jobs.add(job)
+            cli_job = True
         else:
             raise ValueError("请选择包含 request.json 或 manifest.json 的任务目录")
         if job in self._processes and self._folders.get(job, self.jobs / job).resolve() != folder:
             raise ValueError("任务标识与当前运行的任务冲突")
+        previous = self._folders.get(job)
+        was_cli = job in self._cli_jobs
         self._folders[job] = folder
-        self.info(job)
+        if cli_job:
+            self._cli_jobs.add(job)
+        else:
+            self._cli_jobs.discard(job)
+        try:
+            self.info(job)
+        except (ValueError, OSError, KeyError, TypeError):
+            if previous is None:
+                self._folders.pop(job, None)
+            else:
+                self._folders[job] = previous
+            if was_cli:
+                self._cli_jobs.add(job)
+            else:
+                self._cli_jobs.discard(job)
+            raise
         return job
 
     def history(self):
@@ -168,8 +214,11 @@ class JobStore:
         folder = self._folder(job_id)
         if job_id in self._cli_jobs:
             manifest = read_json(folder / "manifest.json")
-            config = manifest["config"]
-            runs = manifest.get("runs", [])
+            if not isinstance(manifest, dict):
+                raise ValueError("任务配置无效")
+            config = manifest.get("config")
+            runs = manifest.get("runs")
+            _validate_task_records(config, runs)
             return {"id": job_id, "name": folder.name, "created_at": manifest.get("created_at", ""),
                     "state": "completed" if runs and all(row.get("status") == "completed" for row in runs) else "incomplete",
                     "config": config, "parameters": {}, "runs": runs, "done": len(runs),
@@ -183,6 +232,11 @@ class JobStore:
                 or not isinstance(done, dict) or not isinstance(manifest, dict)
                 or not isinstance(manifest.get("runs", []), list)):
             raise ValueError("任务配置无效")
+        _validate_task_records(request.get("config"), manifest.get("runs", []))
+        if any(key in request and not isinstance(request[key], str) for key in ("name", "created_at")):
+            raise ValueError("任务配置无效")
+        if done and type(done.get("return_code")) is not int:
+            raise ValueError("任务完成记录无效")
         if done:
             state = {0: "completed", 2: "incomplete", 3: "cancelled"}.get(done.get("return_code"), "failed")
         elif self._alive(request):
@@ -191,8 +245,8 @@ class JobStore:
             state = "interrupted"
         runs = manifest.get("runs", [])
         expected = len(request.get("config", {}).get("methods", [])) * (
-            request.get("config", {}).get("repeats", 5) if request.get("config", {}).get("command") == "benchmark" else 1)
-        return {**request, "id": job_id, "state": state, "runs": runs, "done": len(runs),
+            request.get("config", {}).get("repeats", 1) if request.get("config", {}).get("command") == "benchmark" else 1)
+        return {**request, "name": request.get("name", folder.name), "id": job_id, "state": state, "runs": runs, "done": len(runs),
                 "expected": expected, "folder": str(folder), "results_folder": str(folder / "results"), "manifest": manifest,
                 "completion": done}
 

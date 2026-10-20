@@ -50,13 +50,13 @@ a = Analysis(
     noarchive=False,
 )
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="JINGWEI Benchmark",
+exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="jingwei",
           debug=False, bootloader_ignore_signals=False, strip=False, upx=False,
           console=False, disable_windowed_traceback=False,
           icon=str(root / "figures/Jingwei_logo.png"),
           version=str(application / "packaging/windows-version.txt"))
-console = EXE(pyz, a.scripts, [], exclude_binaries=True, name="jingwei-benchmark",
+console = EXE(pyz, a.scripts, [], exclude_binaries=True, name="jingwei-cli",
               debug=False, strip=False, upx=False, console=True,
               icon=str(root / "figures/Jingwei_logo.png"),
           version=str(application / "packaging/windows-version.txt"))
-collection = COLLECT(exe, console, a.binaries, a.datas, strip=False, upx=False, name="JINGWEI Benchmark")
+collection = COLLECT(exe, console, a.binaries, a.datas, strip=False, upx=False, name="jingwei")

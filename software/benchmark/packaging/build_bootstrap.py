@@ -31,7 +31,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     staging = ROOT / "build" / ("benchmark-bootstrap-test" if args.test_server else "benchmark-bootstrap")
     staging.mkdir(parents=True, exist_ok=True)
-    prefix = f"JINGWEI-Benchmark-{__version__}-windows-x86_64-setup"
+    prefix = f"jingwei-{__version__}-windows-x86_64-setup"
     files = sorted(payload.glob(prefix + "-*.bin")) + [payload / (prefix + ".exe")]
     if len(files) < 2 or not all(p.is_file() for p in files):
         parser.error("build the offline installer first")
@@ -56,7 +56,7 @@ def main():
                     f"/DPayloadInclude={include}", f"/DVerifyInclude={verify}", str(BUILD / "windows-bootstrap.iss")], check=True)
     (output / "windows-installer-manifest.json").write_text(
         json.dumps({"version": __version__, "test_only": args.test_server, "files": manifest}, indent=2), encoding="utf-8")
-    print("Windows single-download installer:", output / "JINGWEI-Benchmark-Windows-Setup.exe")
+    print("Windows single-download installer:", output / "jingwei-Windows-Setup.exe")
 
 
 if __name__ == "__main__":

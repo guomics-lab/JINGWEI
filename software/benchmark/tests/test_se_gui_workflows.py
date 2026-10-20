@@ -36,7 +36,6 @@ def window(tmp_path, monkeypatch):
               for name, spec in METHODS.items()}
     monkeypatch.setattr(BenchmarkWindow, 'refresh_environment', lambda self: self.apply_environment((states, False, None)))
     win = BenchmarkWindow(tmp_path / 'desktop', load_default=False)
-    set_value(win.fields['evaluation_protocol'], 'fair')
     win.mode_changed()
     errors = []
     win.show_error = errors.append
@@ -224,34 +223,48 @@ def test_open_cli_result_and_invalid_folder_preserves_current_task(window, tmp_p
     assert errors and win.selected_job == selected
 
 
-def test_notebook_gui_runs_one_exact_mask_and_disables_unused_options(window, tmp_path):
+def test_original_mnar_gui_runs_one_shared_reference_mask(window, tmp_path):
     app, win, source, errors = window
-    from jingwei_benchmark.notebook_protocol import load_notebook_matrix, notebook_masks
-    win.fields['evaluation_protocol'].setCurrentIndex(win.fields['evaluation_protocol'].findData('original-notebook'))
-    until(app, lambda: win.preview_data is not None)
+    import torch
+    from jingwei_benchmark._legacy.datasets import CSVDataset
+    from jingwei_benchmark.data_io import load_matrix
+    win.fields['mechanism'].setCurrentIndex(win.fields['mechanism'].findData('mnar-jingwei-original'))
     assert 'repeats' not in win.fields and win.configuration()['repeats'] == 1
-    for key in ('mask_rate', 'training_mask_rate', 'training_mechanism', 'low_quantile', 'max_epochs', 'header', 'index_column'):
-        assert not win.fields[key].isEnabled()
-    win.select_methods(['knn', 'feature-minimum'])
+    assert not win.fields['mask_rate'].isEnabled() and win.mask_rate_stack.currentIndex()==1
+    assert not hasattr(win,'protocol_summary')
+    assert win.run_settings_form.rowCount()==3
+    win.select_methods(['mean'])
     win.start_job()
     until(app, lambda: win.selected_job is not None)
     until(app, lambda: win.store.info(win.selected_job)['state'] in TERMINAL)
     win.refresh_jobs()
     info = win.store.info(win.selected_job)
-    assert info['state'] == 'completed' and info['done'] == 2 and not errors
+    assert info['state'] == 'completed' and info['done'] == 1 and not errors
     actual = np.load(Path(info['folder']) / 'results/repeat_000/masks.npz')
-    expected, _ = notebook_masks(load_notebook_matrix(source, seed=win.configuration()['seed']))
-    np.testing.assert_array_equal(actual['evaluation_hidden'], expected.evaluation_hidden)
+    from jingwei_benchmark.gui_jobs import read_json
+    meta=read_json(Path(info['folder'])/'results/repeat_000/mask_config.json')
+    result=read_json(Path(info['folder'])/'results/metrics.json')[0]
+    empty=~(actual['observed'] & ~actual['evaluation_hidden']).any(0)
+    assert empty.any() and result['zero_cols']==int(empty.sum())
+    assert result['n_excluded']==int(actual['evaluation_hidden'][:,empty].sum())
+    exported=pd.read_csv(Path(info['folder'])/'results/repeat_000/mean/imputed.csv',index_col=0).to_numpy()
+    assert np.isnan(exported[:,empty]).all() and np.isfinite(exported[:,~empty]).all()
+    working=load_matrix(source).frame.to_numpy()
+    for stage,eligible,key in [('evaluation',actual['observed'],'evaluation_hidden')]:
+        path=tmp_path/(stage+'.csv')
+        pd.DataFrame(np.where(eligible,working,np.nan)).to_csv(path)
+        with torch.random.fork_rng(devices=[]):
+            torch.manual_seed(meta[stage]['random_seed'])
+            expected=CSVDataset(path)
+        np.testing.assert_array_equal(actual[key],eligible & ~expected.mask.numpy().astype(bool))
     assert not actual['training_hidden'].any()
+    assert meta['training']['probability_mode']=='not-applied'
     assert win.paired.isHidden() and win.result_table.isColumnHidden(0)
     win.set_language('en')
-    assert 'single mask' in win.protocol_summary.text()
-    win.fields['evaluation_protocol'].setCurrentIndex(win.fields['evaluation_protocol'].findData('fair'))
-    win.fields['mechanism'].setCurrentIndex(win.fields['mechanism'].findData('mnar-jingwei-original'))
-    assert not win.fields['mask_rate'].isEnabled()
-    assert 'original probabilities' in win.protocol_summary.text()
+    assert win.automatic_mask_rate.text()=='Auto'
     win.fields['mechanism'].setCurrentIndex(win.fields['mechanism'].findData('mcar'))
     assert win.fields['mask_rate'].isEnabled()
+    assert win.mask_rate_stack.currentIndex()==0
 
 
 def test_old_repeat_setting_cannot_reappear_in_new_gui_jobs(tmp_path, monkeypatch):

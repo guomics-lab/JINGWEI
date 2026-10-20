@@ -57,7 +57,21 @@ def main():
                     parameters, legacy, device=payload["device"], seed=payload["seed"], fallback=compute,
                     folder=folder, rng_input=payload.get("notebook_rng_input"))
             else:
-                prediction, metadata = compute(matrix, training_hidden)
+                valid_columns = np.isfinite(matrix).any(axis=0)
+                if payload.get("exclude_empty_features") and not valid_columns.all() and not payload["method"].startswith("jingwei-"):
+                    # benchmark.ipynb removes all-empty protein columns before
+                    # comparison methods. Preserve the mask, never invent donors.
+                    if not valid_columns.any():
+                        raise ValueError("no observed features remain after evaluation masking")
+                    filtered, metadata = compute(np.ascontiguousarray(matrix[:, valid_columns]),
+                                                 training_hidden[:, valid_columns])
+                    if np.asarray(filtered).shape != matrix[:, valid_columns].shape:
+                        raise ValueError("method returned a matrix with the wrong shape")
+                    prediction = np.full(matrix.shape, np.nan)
+                    prediction[:, valid_columns] = filtered
+                    metadata["input_empty_features_excluded"] = int((~valid_columns).sum())
+                else:
+                    prediction, metadata = compute(matrix, training_hidden)
         computed = time.perf_counter()
         temporary = folder / "predictions.npz.tmp"
         with temporary.open("wb") as handle:
