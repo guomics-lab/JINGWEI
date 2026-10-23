@@ -24,6 +24,13 @@ outputs also passed. The default Alzheimer input completed Mean, DMF and DCAE
 imputation, with both neural methods running the default 500 epochs; all three
 210 × 1542 CSVs retained identifiers and observed values.
 
+The permitted frozen application also passed four isolated hidden native GUI
+journeys: English and Chinese installation-language markers, each with an older
+opposite-language preference, followed by reopening after a manual language
+choice. Initial language, three CSV exports per journey, native taskbar icons,
+configuration locks, live logs and warm environment-cache reuse passed. These
+were application tests, without executing the blocked complete installer.
+
 All 58 embedded first-party modules match the current source. Fifteen model,
 training, masking and metric modules are identical to the 1.0.7 bundle; this
 maintenance update does not change scientific algorithms or the public Python
