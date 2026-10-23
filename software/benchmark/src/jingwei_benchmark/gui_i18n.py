@@ -150,7 +150,6 @@ MESSAGES = {
     "失败": "Failed", "已停止": "Cancelled", "已中断": "Interrupted", "跳过": "Skipped", "超时": "Timed out",
     "{state} · {done}/{total}": "{state} · {done}/{total}",
     "{count} 种方法 · {failed} 条未完成/失败记录": "{count} methods · {failed} incomplete / failed runs",
-    "插补任务仅提供运行时间；准确性指标不适用。": "Imputation provides run times; accuracy metrics do not apply.",
     "暂无可比较数据": "No comparable data", "日志尚未生成。": "No log yet.",
     "导出完整任务": "Export complete job", "完整任务已导出": "Job exported",
     "暂无可导出的图表数据": "No plot data to export", "导出图表及源数据": "Export plot and source data",

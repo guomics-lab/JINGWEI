@@ -23,7 +23,7 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-1.0.7-windows-x86_64-offline.exe"><strong>Download jingwei for Windows (.exe)</strong></a> ·
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.8/jingwei-1.0.8-windows-x86_64-offline.exe"><strong>Download jingwei for Windows (.exe)</strong></a> ·
   <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7">Linux CLI</a>
 </p>
 
@@ -177,9 +177,9 @@ DCAE; the published Python package and earlier installers are unchanged.
 
 ## Benchmark software
 
-[**Download Windows offline installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-1.0.7-windows-x86_64-offline.exe) · [Installation](software/benchmark/RELEASE-1.0.7.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7)
+[**Download Windows offline installer (.exe)**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.8/jingwei-1.0.8-windows-x86_64-offline.exe) · [Installation](software/benchmark/RELEASE-1.0.8.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7)
 
-The **1.0.7** Windows application is named **jingwei** and bundles Python, R and method dependencies. Its
+The **1.0.8** Windows application is named **jingwei** and bundles Python, R and method dependencies. Its
 native Windows GUI supports **中文 / English** and includes `data/Alzheimer.csv`.
 
 Choose data, methods and an output folder. Run settings contain only **Task**,

@@ -26,6 +26,9 @@ def main():
     started = time.monotonic()
     from .gui_startup import StartupGate
     window = BenchmarkWindow(output / "workspace", load_default=reopening, startup=True)
+    initial_language = window.language
+    if "--expected-language" in sys.argv:
+        assert initial_language == sys.argv[sys.argv.index("--expected-language") + 1]
     window.resize(1366, 768)
     if "--hidden" in sys.argv[2:]:
         window.setAttribute(Qt.WA_DontShowOnScreen, True)
@@ -101,7 +104,7 @@ def main():
             assert window.fields["mechanism"].isEnabled()
             assert window.fields["mask_rate"].isEnabled()
             assert window.field_labels["mask_rate"].text() == window.t("训练掩蔽比例")
-            set_value(window.fields["command"], "benchmark")
+            set_value(window.fields["command"], "impute" if "--impute" in sys.argv else "benchmark")
             window.mode_changed()
             set_value(window.fields["device"], "cpu")
             window.set_language("zh")
@@ -139,6 +142,16 @@ def main():
                 assert "Completed" in window.log_view.toPlainText()
                 assert Path(info["folder"]).parent == output / "chosen output"
                 rows = read_json(Path(info["folder"]) / "results/metrics.json")
+                if info["config"]["command"] == "impute":
+                    assert window.result_notice.isHidden() and not window.result_notice.text()
+                    import numpy as np
+                    import pandas as pd
+                    original = pd.read_csv(Path(info["folder"]) / "input.csv", index_col=0).to_numpy()
+                    for row in rows:
+                        csv = Path(info["folder"]) / "results" / row["imputed_csv"]
+                        predicted = pd.read_csv(csv, index_col=0).to_numpy()
+                        assert np.isfinite(predicted).all()
+                        np.testing.assert_allclose(predicted[np.isfinite(original)], original[np.isfinite(original)])
                 dcae = next(row for row in rows if row["method"] == "jingwei-dcae")
                 assert dcae["ae_architecture"] == "global"
                 assert dcae["model_architecture_version"] == "global-ae-v1"
@@ -160,6 +173,8 @@ def main():
                 window.grab().save(str(output / "desktop-results-en.png"))
                 write_json(output / "smoke-result.json", {"status": info["state"],
                     "native_ui": app.platformName() == "windows", "logo_loaded": not window.logo.isNull(),
+                    "initial_language": initial_language,
+                    "imputation_csv_files": len(rows) if info["config"]["command"] == "impute" else 0,
                     "startup_without_task": True, "custom_output": str(output / "chosen output"),
                     "live_log": bool(window.log_view.toPlainText()),
                     "manual_task_open": True, "repeats_control_removed": "repeats" not in window.fields,

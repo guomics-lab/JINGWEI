@@ -62,6 +62,8 @@ def main():
             "startup_environment_check": "before-main-window", "run_settings": ["command", "mechanism", "mask_rate"],
             "bundled_windows_r": True,
             "desktop_languages": ["zh", "en"],
+            "desktop_initial_language": "installation wizard selection; later user selection remembered",
+            "imputation_exports": "imputed/<method>.csv; H5AD inputs also export imputed/<method>.h5ad",
             "app_user_model_id": "JINGWEI.Benchmark.Desktop",
             "default_input": "data/Alzheimer.csv",
             "default_jingwei_engine": "torch",

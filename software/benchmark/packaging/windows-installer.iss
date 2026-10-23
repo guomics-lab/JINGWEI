@@ -29,6 +29,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
+ShowLanguageDialog=yes
 DisableDirPage=no
 WizardStyle=modern
 SetupIconFile={#SourceDir}\jingwei.ico
@@ -94,4 +95,16 @@ begin
     automatic shutdown of the user's running app. The validator also passes
     /NOICONS, /NOCLOSEAPPLICATIONS and an explicit temporary /DIR. }
   Result := ExpandConstant('{param:JINGWEI-VALIDATION|0}') = '1';
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then begin
+    { Stored beside the application so the first launch (also after upgrades)
+      uses the language selected in this installation wizard. }
+    if not SaveStringToFile(ExpandConstant('{app}\installation-language.txt'),
+      Utf8Encode(ActiveLanguage + #13#10 + '{#AppVersion}' + #13#10 +
+      GetDateTimeString('yyyymmddhhnnss', '-', ':') + #13#10), False) then
+      RaiseException('Unable to save the application language.');
+  end;
 end;

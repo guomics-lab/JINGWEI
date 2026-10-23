@@ -4,6 +4,19 @@ import pytest
 from jingwei_benchmark.data_io import load_matrix, write_predictions
 
 
+def test_imputation_publication_works_when_hardlinks_are_unavailable(tmp_path, monkeypatch):
+    import os
+    from jingwei_benchmark.data_io import publish_imputation
+    worker = tmp_path / "worker"
+    worker.mkdir()
+    (worker / "imputed.csv").write_text(",P1\nS1,12.5\n", encoding="utf-8")
+    monkeypatch.setattr(os, "link", lambda *args: (_ for _ in ()).throw(OSError("unsupported filesystem")))
+    paths = publish_imputation(worker, tmp_path, method="mean")
+    assert paths == {"imputed_csv": "imputed/mean.csv"}
+    assert (tmp_path / paths["imputed_csv"]).read_bytes() == (worker / "imputed.csv").read_bytes()
+    assert not list((tmp_path / "imputed").glob("*.tmp"))
+
+
 def test_explicitly_excluded_features_remain_missing_and_do_not_hide_other_failures(tmp_path):
     source = tmp_path / "scope.csv"
     pd.DataFrame([[2., 3.], [4., 5.]], columns=["P0", "P1"]).to_csv(source, index=False)

@@ -178,6 +178,33 @@ def load_matrix(
     )
 
 
+def publish_imputation(folder, output, *, method):
+    """Expose final matrices without making users navigate worker directories."""
+    import os
+    import shutil
+    import uuid
+    folder, output = Path(folder), Path(output)
+    destination = output / "imputed"
+    destination.mkdir(exist_ok=True)
+    files = {}
+    for extension in ("csv", "h5ad"):
+        source = folder / f"imputed.{extension}"
+        if extension == "h5ad" and not source.is_file():
+            continue
+        target = destination / f"{method}.{extension}"
+        temporary = destination / f".{method}.{uuid.uuid4().hex}.tmp"
+        try:
+            try:
+                os.link(source, temporary)
+            except OSError:
+                shutil.copyfile(source, temporary)
+            temporary.replace(target)
+        finally:
+            temporary.unlink(missing_ok=True)
+        files[f"imputed_{extension}"] = target.relative_to(output).as_posix()
+    return files
+
+
 def write_predictions(
     data, values, folder, *, method, input_scale, output_scale="input", allow_nonfinite=False,
     excluded_features=None,

@@ -188,7 +188,8 @@ def test_production_manifest_rejects_non_github_urls(payload, tmp_path):
     assert not (tmp_path / 'jingwei-Windows-Setup.exe').exists()
 
 
-def test_complete_offline_exe_installs_without_adjacent_payload(payload, tmp_path):
+@pytest.mark.parametrize('setup_language,expected', [('english', 'english'), ('chinesesimp', 'chinesesimp')])
+def test_complete_offline_exe_installs_without_adjacent_payload(payload, tmp_path, setup_language, expected):
     output = tmp_path / 'offline-build'
     result = run([ISCC, '/DSingleFileInstaller', f'/DSourceDir={payload / "source"}',
                   f'/DReleaseDir={output}', f'/DAppVersion={__version__}',
@@ -206,11 +207,12 @@ def test_complete_offline_exe_installs_without_adjacent_payload(payload, tmp_pat
     temp.mkdir()
     result = run([standalone, '/JINGWEI-VALIDATION=1', '/VERYSILENT',
                   '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS',
-                  '/NOCLOSEAPPLICATIONS', f'/DIR={target}', f'/LOG={tmp_path / "offline.log"}'],
+                  '/NOCLOSEAPPLICATIONS', f'/LANG={setup_language}', f'/DIR={target}', f'/LOG={tmp_path / "offline.log"}'],
                  env={**os.environ, 'TEMP': str(temp), 'TMP': str(temp)}, cwd=download)
     assert result.returncode == 0, result.stdout + result.stderr
     assert (target / '_internal/fixture.txt').read_text() == 'installed exactly once'
     assert (target / 'LICENSE.txt').read_bytes() == (APP / 'LICENSE.txt').read_bytes()
+    assert (target / 'installation-language.txt').read_text().splitlines()[0] == expected
     assert not list(target.glob('unins*'))
     assert not (target / '.jingwei-installer-cache').exists()
     assert not list(download.glob('*.bin'))

@@ -769,10 +769,12 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         failed = sum(row.get("status") != "completed" for row in info["runs"])
         message = self.t("{count} 种方法 · {failed} 条未完成/失败记录", count=count, failed=failed)
         if not benchmark:
-            message = self.t("插补任务仅提供运行时间；准确性指标不适用。")
+            message = (self.t("{count} 种方法 · {failed} 条未完成/失败记录",
+                              count=len(info["runs"]), failed=failed) if failed else "")
         elif not count:
             message = self.t("暂无可比较数据") + " · " + message
         self.result_notice.setText(message)
+        self.result_notice.setVisible(bool(message))
         self.show_method_log()
 
     def show_method_log(self, *args):
@@ -820,7 +822,13 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
 
     def open_results(self):
         if self.selected_job:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(self.store.info(self.selected_job)["folder"]))
+            info = self.store.info(self.selected_job)
+            folder = Path(info["folder"])
+            if info["config"].get("command") == "impute":
+                imputed = Path(info.get("results_folder", folder / "results")) / "imputed"
+                if imputed.is_dir():
+                    folder = imputed
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
     def export_job(self):
         if not self.selected_job:
@@ -937,7 +945,8 @@ def launch(workspace=None):
     store = JobStore(workspace)
     lock = QLockFile(str(store.root / "desktop.lock"))
     if not lock.tryLock(0):
-        language = read_json(store.root / "ui.json", {}).get("language", "zh")
+        from .gui_language import initial_language
+        language = initial_language(store.root)
         QMessageBox.information(None, "JINGWEI", translate(language, "这个工作目录已有 JINGWEI 窗口在运行。"))
         return 1
     from .gui_startup import StartupGate

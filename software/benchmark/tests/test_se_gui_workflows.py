@@ -139,6 +139,34 @@ def test_benchmark_plot_export_clone_then_imputation(window, tmp_path, monkeypat
     predicted = pd.read_csv(Path(completed['folder'])/'results/repeat_000/mean/imputed.csv', index_col=0).to_numpy()
     np.testing.assert_allclose(predicted[np.isfinite(original)], original[np.isfinite(original)])
     assert np.isfinite(predicted).all() and not errors
+    win.refresh_jobs()
+    for language in ('en', 'zh'):
+        win.set_language(language)
+        assert not win.result_notice.text() and win.result_notice.isHidden()
+    direct = Path(completed['folder']) / 'results/imputed'
+    for method in ('mean', 'knn'):
+        assert (direct / f'{method}.csv').read_bytes() == (
+            Path(completed['folder']) / f'results/repeat_000/{method}/imputed.csv').read_bytes()
+    from PySide6.QtGui import QDesktopServices
+    opened = []
+    monkeypatch.setattr(QDesktopServices, 'openUrl', lambda url: opened.append(url.toLocalFile()))
+    win.open_results()
+    assert Path(opened[-1]) == direct
+
+
+def test_imputation_export_failure_remains_visible(window, monkeypatch, tmp_path):
+    app, win, source, errors = window
+    info = {'id': 'a' * 32, 'name': 'failed export', 'folder': str(tmp_path),
+            'config': {'command': 'impute', 'methods': ['mean'], 'repeats': 1},
+            'manifest': {}, 'state': 'incomplete', 'done': 1, 'expected': 1,
+            'runs': [{'repeat': 0, 'method': 'mean', 'status': 'failed',
+                      'error': 'output/evaluation failed: CSV output is locked'}]}
+    monkeypatch.setattr(win.store, 'info', lambda job_id: info)
+    win.selected_job = info['id']
+    win.set_language('en')
+    win.render_results()
+    assert not win.result_notice.isHidden()
+    assert '1 incomplete / failed' in win.result_notice.text()
 
 
 def test_close_running_job_defaults_no_then_confirmed_stop_is_durable(window):

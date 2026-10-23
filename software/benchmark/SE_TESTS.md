@@ -1,5 +1,34 @@
 # Software verification
 
+## 1.0.8 installation language and imputation exports — 2026-10-23
+
+Setup records its selected language beside the installed application. The first
+launch uses that language even with an older preference in the user profile;
+later manual choices persist until the next installation. Both English and
+Chinese real-compiler installer fixtures passed. The unnecessary imputation
+notice is removed; actual export failures retain a visible failure summary.
+
+Imputation exposes `imputed/<method>.csv` in the CLI output, or
+`results/imputed/<method>.csv` inside a GUI task. Open output folder opens this
+directory directly. H5AD input also produces `<method>.h5ad`. Atomic hard-link
+publication avoids duplicating large matrices where supported, with a tested
+copy fallback. Detailed per-method exports remain available.
+
+Across focused runs, 66 distinct regression cases passed with no remaining
+failures or skips, including GUI workflows, installation language, CSV/H5AD
+exports, original identifiers/observations, and explicit export failure handling.
+The actual frozen application, with host environment paths removed, completed
+all 35 CPU imputation methods and all five CUDA neural methods. Every successful
+run produced a finite CSV matching its detailed export. Sparse H5AD CSV/layer
+outputs also passed. The default Alzheimer input completed Mean, DMF and DCAE
+imputation, with both neural methods running the default 500 epochs; all three
+210 × 1542 CSVs retained identifiers and observed values.
+
+All 58 embedded first-party modules match the current source. Fifteen model,
+training, masking and metric modules are identical to the 1.0.7 bundle; this
+maintenance update does not change scientific algorithms or the public Python
+package. Evidence: `results/gui-fixes-20261023/`.
+
 ## 1.0.7 complete Windows offline installer — 2026-10-20
 
 The primary Windows download is now one complete offline EXE. The directory

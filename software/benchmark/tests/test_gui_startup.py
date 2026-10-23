@@ -14,6 +14,26 @@ def states():
     return {n:{'available':True,'backend':m.backend,'gpu':m.gpu,'reason':None} for n,m in METHODS.items()}
 
 
+@pytest.mark.parametrize('installer,language', [('english','en'), ('chinesesimp','zh')])
+def test_startup_panel_uses_installer_language_before_showing(tmp_path, monkeypatch, installer, language):
+    import jingwei_benchmark.runtime as runtime
+    marker = tmp_path / 'installation-language.txt'
+    marker.write_text(installer, encoding='utf-8')
+    monkeypatch.setattr(runtime, 'resource_root', lambda: tmp_path)
+    monkeypatch.setattr(BenchmarkWindow, 'refresh_environment', lambda self: None)
+    app = QApplication.instance() or QApplication([])
+    win = BenchmarkWindow(tmp_path / 'workspace', load_default=False, startup=True)
+    gate = StartupGate(win, hidden=True)
+    assert win.language == language
+    assert gate.message.text() == win.t('正在检查计算环境…')
+    if language == 'en':
+        assert win.start_button.text() == 'Run'
+        assert not any('\u4e00' <= ch <= '\u9fff' for ch in gate.message.text())
+    gate.panel.close()
+    win.close()
+    app.processEvents()
+
+
 def test_workbench_waits_for_probe_and_retry_then_opens(tmp_path,monkeypatch):
     app=QApplication.instance() or QApplication([])
     pending=[]

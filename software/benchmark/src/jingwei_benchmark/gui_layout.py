@@ -113,9 +113,8 @@ class WorkbenchLayout:
     def setup_ui(self):
         from .gui import RunTable, RunTableModel, MetricPlot, FractionControl, control
         from .windows_identity import apply_application_icon
-        self.language = read_json(self.store.root / "ui.json", {}).get("language", "zh")
-        if self.language not in ("zh", "en"):
-            self.language = "zh"
+        from .gui_language import initial_language
+        self.language = initial_language(self.store.root)
         self._translations, self._combo_translations = [], []
         self.fields = {}
         self._gpu_name = None
@@ -610,4 +609,5 @@ class WorkbenchLayout:
         if not self.selected_job:
             self.plot.empty(self.t("暂无可比较数据"))
             self.progress_label.setText(self.t("尚无任务"))
-        write_json(self.store.root / "ui.json", {"language": language})
+        from .gui_language import remember_language
+        remember_language(self.store.root, language)

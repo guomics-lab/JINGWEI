@@ -151,8 +151,50 @@ def test_imputation_preserves_observations_and_has_no_evaluation_mask(tmp_path):
         frame.to_numpy()[np.isfinite(frame.to_numpy())],
     )
     assert np.isfinite(values).all()
+    direct = output / "imputed/mean.csv"
+    assert direct.read_bytes() == (output / "repeat_000/mean/imputed.csv").read_bytes()
+    manifest = __import__("json").loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["runs"][0]["imputed_csv"] == "imputed/mean.csv"
     assert not np.load(output / "repeat_000" / "masks.npz")["evaluation_hidden"].any()
     assert not np.load(output / "repeat_000" / "masks.npz")["training_hidden"].any()
+
+
+def test_imputation_export_failure_cannot_be_reported_as_completed(tmp_path, monkeypatch):
+    import json
+    import jingwei_benchmark.benchmark as orchestration
+    def failed_export(*args, **kwargs):
+        raise PermissionError('CSV output is locked')
+    monkeypatch.setattr(orchestration, 'write_predictions', failed_export)
+    source = fixture(tmp_path)
+    output = tmp_path / 'failed-export'
+    assert main(['impute', '--input', str(source), '--methods', 'mean',
+                 '--output', str(output)]) == 2
+    runs = json.loads((output / 'metrics.json').read_text(encoding='utf-8'))
+    assert runs[0]['status'] == 'failed'
+    assert 'CSV output is locked' in runs[0]['error']
+    assert 'imputed_csv' not in runs[0]
+    assert not (output / 'imputed/mean.csv').exists()
+
+
+def test_h5ad_imputation_publishes_csv_and_h5ad_with_original_identifiers(tmp_path):
+    import anndata as ad
+    from scipy.sparse import csr_matrix
+    original = np.array([[10., np.nan, 12.], [11., 9., 10.], [8., 11., 14.]])
+    data = ad.AnnData(csr_matrix(original))
+    data.obs_names = ['sample-A', 'sample-B', 'sample-C']
+    data.var_names = ['protein-1', 'protein-2', 'protein-3']
+    source = tmp_path / 'input.h5ad'
+    data.write_h5ad(source)
+    output = tmp_path / 'h5ad-results'
+    assert main(['impute', '--input', str(source), '--methods', 'mean',
+                 '--device', 'cpu', '--output', str(output)]) == 0
+    exported = pd.read_csv(output / 'imputed/mean.csv', index_col=0)
+    assert list(exported.index) == list(data.obs_names)
+    assert list(exported.columns) == list(data.var_names)
+    np.testing.assert_allclose(exported.to_numpy()[np.isfinite(original)], original[np.isfinite(original)])
+    result = ad.read_h5ad(output / 'imputed/mean.h5ad')
+    np.testing.assert_allclose(result.layers['jingwei_imputed'], exported.to_numpy())
+    assert np.isfinite(exported.to_numpy()).all()
 
 
 def test_existing_output_is_not_overwritten(tmp_path):

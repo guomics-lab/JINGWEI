@@ -16,7 +16,7 @@ import time
 import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr, spearmanr
-from .data_io import load_matrix, write_predictions
+from .data_io import load_matrix, write_predictions, publish_imputation
 from .methods import METHODS, availability, canonical_name
 from .metrics import imputation_metrics, wasserstein_distance_2
 from .protocol import ORIGINAL_MECHANISM, protocol_masks, uses_mask_rate
@@ -557,6 +557,8 @@ def run_experiment(args):
                             allow_nonfinite=notebook,
                             excluded_features=~valid_columns if original_empty_policy else None,
                         )
+                        if args.command == "impute":
+                            result.update(publish_imputation(folder, args.output, method=method))
                     except Exception as exc:
                         result.update(
                             status="failed", error=f"output/evaluation failed: {exc}"
