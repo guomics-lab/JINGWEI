@@ -22,10 +22,12 @@ drive. All CPU/CUDA, Python and R components are inside this one file; installat
 needs no network connection or adjacent BIN files. You can choose where to save
 the EXE in your browser before downloading. Then open **Start → jingwei**.
 See the [installation guide](RELEASE-1.0.7.md).
-**Development 1.0.8 (installer signing/validation pending):**
+**[Unsigned 1.0.8 preview](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.8):**
+The full installer is blocked by Smart App Control on the validation machine;
+full installation validation is incomplete. See the [limitations](RELEASE-1.0.8.md).
 The language selected in Setup is used on first launch; later manual language choices are remembered.
 Impute tasks expose one CSV per successful method in `results/imputed/`; **Open
-output folder** opens this folder directly. H5AD inputs also export H5AD files.
+folder** opens this folder directly. H5AD inputs also export H5AD files.
 The GUI uses the original JINGWEI bird for the
 application, window and Windows taskbar.
 

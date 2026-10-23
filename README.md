@@ -183,7 +183,7 @@ The **1.0.7** Windows application is named **jingwei** and bundles Python, R and
 native Windows GUI supports **中文 / English** and includes `data/Alzheimer.csv`.
 
 The source includes the [1.0.8 GUI/export fixes](software/benchmark/RELEASE-1.0.8.md).
-The packaged download remains 1.0.7 while the new installer's signing requirement is resolved.
+An [unsigned Windows 1.0.8 preview](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.8) is available. Its full installation check was blocked by Smart App Control; see the release limitations. The stable download remains 1.0.7.
 
 Choose data, methods and an output folder. Run settings contain only **Task**,
 **Missingness** and **Mask rate**; device and model settings are in **Advanced**.

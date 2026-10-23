@@ -9,7 +9,7 @@ Chinese real-compiler installer fixtures passed. The unnecessary imputation
 notice is removed; actual export failures retain a visible failure summary.
 
 Imputation exposes `imputed/<method>.csv` in the CLI output, or
-`results/imputed/<method>.csv` inside a GUI task. Open output folder opens this
+`results/imputed/<method>.csv` inside a GUI task. Open folder opens this
 directory directly. H5AD input also produces `<method>.h5ad`. Atomic hard-link
 publication avoids duplicating large matrices where supported, with a tested
 copy fallback. Detailed per-method exports remain available.
@@ -34,8 +34,10 @@ SHA-256 `5b084509e6282dc99c2c48635397567905db9125c5add7e633de9ec83d2b5c46`).
 Its full-installation check is **blocked**, not passed: Windows returned 4551;
 Code Integrity events 3033/3077 identify the enforced VerifiedAndReputableDesktop
 policy. No security settings or executable contents were changed to bypass it.
-The candidate is not promoted to the stable release while signing/approval is
-unresolved. Tiny real-installer language checks and frozen-application checks
+The unsigned candidate is distributed as a prerelease, not promoted to stable.
+The current GitHub credential also lacks the workflow scope needed to add a new
+Windows Actions validation workflow; no remote installation pass is claimed.
+Tiny real-installer language checks and frozen-application checks
 above are separate from this incomplete full-installation check.
 
 ## 1.0.7 complete Windows offline installer — 2026-10-20
