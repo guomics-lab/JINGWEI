@@ -29,6 +29,15 @@ training, masking and metric modules are identical to the 1.0.7 bundle; this
 maintenance update does not change scientific algorithms or the public Python
 package. Evidence: `results/gui-fixes-20261023/`.
 
+The complete 1.0.8 offline EXE was built successfully (2,147,471,119 bytes,
+SHA-256 `5b084509e6282dc99c2c48635397567905db9125c5add7e633de9ec83d2b5c46`).
+Its full-installation check is **blocked**, not passed: Windows returned 4551;
+Code Integrity events 3033/3077 identify the enforced VerifiedAndReputableDesktop
+policy. No security settings or executable contents were changed to bypass it.
+The candidate is not promoted to the stable release while signing/approval is
+unresolved. Tiny real-installer language checks and frozen-application checks
+above are separate from this incomplete full-installation check.
+
 ## 1.0.7 complete Windows offline installer — 2026-10-20
 
 The primary Windows download is now one complete offline EXE. The directory

@@ -23,7 +23,7 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.8/jingwei-1.0.8-windows-x86_64-offline.exe"><strong>下载 Windows 软件安装包（.exe）</strong></a> ·
+  <a href="https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-1.0.7-windows-x86_64-offline.exe"><strong>下载 Windows 软件安装包（.exe）</strong></a> ·
   <a href="https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7">Linux CLI</a>
 </p>
 
@@ -36,7 +36,7 @@ JINGWEI 是一个用于蛋白质组数据缺失值插补的深度学习框架，
 | 你的需求 | 使用产品 | 开始使用 |
 | --- | --- | --- |
 | 用 **DMF / DCAE** 处理自己的数据 | JINGWEI Python 包 | [快速开始](#快速开始) · [Python API](#python-api-示例) |
-| 比较 **35 种插补方法** | 独立的 jingwei 软件 | [Windows 安装包](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.8/jingwei-1.0.8-windows-x86_64-offline.exe) · [使用指南](software/benchmark/README.md) |
+| 比较 **35 种插补方法** | 独立的 jingwei 软件 | [Windows 安装包](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-1.0.7-windows-x86_64-offline.exe) · [使用指南](software/benchmark/README.md) |
 
 ## 功能
 
@@ -174,9 +174,11 @@ imputed = dataset.inverse_transform(imputed_normalized)
 
 ## Benchmark 软件
 
-[**下载 Windows 离线安装包（.exe）**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.8/jingwei-1.0.8-windows-x86_64-offline.exe) · [安装说明](software/benchmark/RELEASE-1.0.8.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7)
+[**下载 Windows 离线安装包（.exe）**](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-1.0.7-windows-x86_64-offline.exe) · [安装说明](software/benchmark/RELEASE-1.0.7.md) · [Linux CLI](https://github.com/guomics-lab/JINGWEI/releases/tag/v1.0.7)
 
-上方链接为 **1.0.8** Windows 安装包，软件名称为 **jingwei**，Python、R 及各方法依赖均已打包。Windows 原生界面支持 **中文 / English**，默认加载内置的 `data/Alzheimer.csv`。
+上方链接为 **1.0.7** Windows 安装包，软件名称为 **jingwei**，Python、R 及各方法依赖均已打包。Windows 原生界面支持 **中文 / English**，默认加载内置的 `data/Alzheimer.csv`。
+
+源码已包含 [1.0.8 的界面与导出修复](software/benchmark/RELEASE-1.0.8.md)。新版安装包正等待解决可信签名要求，目前正式下载仍为 1.0.7。
 
 选择数据、方法和输出目录后，点击 **开始**。运行设置仅保留 **任务、缺失机制、掩蔽比例** 三项；设备及模型参数在 **高级设置** 中。GUI 每次运行一次。**日志**实时显示进度；任务提交、运行及停止处理中锁定配置，结束后恢复编辑。**复制配置**恢复当前任务的通用设置及各方法实际参数。任务名留空时自动生成为 `task-YYYYMMDD-HHMMSS`。界面已移除 **打开任务** 按钮。启动时结果为空，计算环境检查在主界面出现前完成，有效缓存和表单设置会复用。安装许可使用纯文本。
 

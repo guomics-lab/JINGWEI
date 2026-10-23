@@ -16,12 +16,13 @@ runs on CPU. GPU execution requires the machine's NVIDIA driver.
 
 ## Windows
 
-Download the complete [Windows offline installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.8/jingwei-1.0.8-windows-x86_64-offline.exe).
+Download the complete [Windows offline installer (.exe)](https://github.com/guomics-lab/JINGWEI/releases/download/v1.0.7/jingwei-1.0.7-windows-x86_64-offline.exe).
 Run it and click **Browse** to select the installation folder, including another
 drive. All CPU/CUDA, Python and R components are inside this one file; installation
 needs no network connection or adjacent BIN files. You can choose where to save
 the EXE in your browser before downloading. Then open **Start → jingwei**.
-See the [installation guide](RELEASE-1.0.8.md).
+See the [installation guide](RELEASE-1.0.7.md).
+**Development 1.0.8 (installer signing/validation pending):**
 The language selected in Setup is used on first launch; later manual language choices are remembered.
 Impute tasks expose one CSV per successful method in `results/imputed/`; **Open
 output folder** opens this folder directly. H5AD inputs also export H5AD files.
