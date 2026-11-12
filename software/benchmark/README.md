@@ -38,9 +38,9 @@ Each GUI task runs once; there are no protocol, repeat, training-mask or seed
 controls. DMF/DCAE are selected by default and `data/Alzheimer.csv` is bundled.
 
 Switch **中文 / English** at the top right. **Preview** shows the detected
-header/ID and matrix; **Import settings** can override numeric IDs or headers.
-**Runtime** reports method availability. Method-specific **Parameters** override
-shared training settings.
+header/ID and matrix; **Advanced** covers import overrides, training settings,
+masking/W2 options and runtime availability. Method-specific **Parameters**
+override shared training settings.
 
 Each run creates its own folder beneath the selected **Output folder**. The
 **Log** tab opens at run start and shows live progress and method output.

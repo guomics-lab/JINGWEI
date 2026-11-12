@@ -108,7 +108,7 @@ def make_argv(config, input_path, output_path, cancel_file=None, parameter_file=
     if custom and (args.low_probability < args.high_probability or args.logistic_slope > 0):
         raise ValueError("MNAR 缺失概率必须随丰度降低而增加")
     if args.mechanism == JINGWEI_MECHANISM and not args.logistic_slope < 0:
-        raise ValueError("JINGWEI MNAR slope must be negative")
+        raise ValueError("JINGWEI MNAR 斜率必须为负数")
     for key in ("max_epochs", "batch_size", "latent_dim", "threads", "timeout", "repeats", "patience", "min_epochs"):
         if getattr(args, key) <= 0:
             raise ValueError(f"{key} 必须大于 0")

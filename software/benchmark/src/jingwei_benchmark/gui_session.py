@@ -71,6 +71,7 @@ class SessionState:
         if "output_scale" in fields:
             set_value(self.fields["output_scale"], fields["output_scale"])
         self.device_changed()
+        self.training_policy_changed()
         methods = data.get("methods")
         if isinstance(methods, list) and all(isinstance(name, str) for name in methods):
             for name, box in self.method_checks.items():
@@ -139,4 +140,4 @@ class SessionState:
         try:
             write_json(self.store.root / "session.json", data)
         except (OSError, ValueError) as exc:
-            self.statusBar().showMessage(str(exc), 5000)
+            self.flash_status(str(exc))

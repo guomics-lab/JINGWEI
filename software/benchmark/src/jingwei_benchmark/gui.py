@@ -8,15 +8,15 @@ import threading
 import numpy as np
 import pandas as pd
 from PySide6.QtCore import Qt, QObject, Signal, QRunnable, QThreadPool, QTimer, QUrl, QLockFile, QAbstractTableModel, QStandardPaths
-from PySide6.QtGui import QColor, QDesktopServices
+from PySide6.QtGui import QColor, QDesktopServices, QFontDatabase, QFont
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QFormLayout, QLabel,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
     QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox, QCheckBox, QListWidget,
-    QListWidgetItem, QTableWidgetItem, QFileDialog, QMessageBox, QDialog,
-    QTableView, QDialogButtonBox,
+    QListWidgetItem, QTableWidgetItem, QPushButton, QFileDialog, QMessageBox, QDialog,
+    QTableView, QHeaderView, QDialogButtonBox,
 )
 
-from .gui_jobs import JobStore, TERMINAL, inspect_input, read_json
+from .gui_jobs import JobStore, TERMINAL, inspect_input
 from .gui_parameters import LABELS, PARAMETERS, NEURAL
 from .gui_layout import WorkbenchLayout
 from .gui_i18n import translate
@@ -25,6 +25,17 @@ from .gui_session import SessionState
 STATE_LABELS = {"running": "运行中", "cancelling": "正在停止", "completed": "已完成",
                 "incomplete": "部分完成", "failed": "失败", "cancelled": "已停止", "interrupted": "已中断",
                 "skipped": "跳过", "timeout": "超时"}
+
+NUMERIC_COLUMNS = {"repeat", "epochs_trained", "best_epoch", "MSE", "RMSE", "MAE",
+                   "NRMSE", "Pearson", "Spearman", "W2", "W2_n_samples",
+                   "W2_n_features", "W2_n_evaluated", "time_s"}
+
+
+def evaluation_scale_name(config):
+    scale = config.get("scale", "raw")
+    transform = config.get("transform", "auto")
+    return "log2" if scale == "log2" or transform == "log2" or (scale == "raw" and transform == "auto") else "raw"
+
 
 def text(label, style=None, wrap=True):
     widget = QLabel(label)
@@ -49,7 +60,7 @@ def control(spec):
     widget = QSpinBox() if isinstance(default, int) else QDoubleSpinBox()
     widget.setRange(low, high)
     if isinstance(widget, QDoubleSpinBox):
-        widget.setDecimals(8 if low is not None and 0 < low < 0.0001 else 4)
+        widget.setDecimals(6 if low is not None and 0 < low < 0.0001 else 4)
         widget.setSingleStep(0.01 if default <= 1 else 0.1)
     widget.setValue(default)
     return widget
@@ -130,10 +141,14 @@ class ParameterDialog(QDialog):
         super().__init__(parent)
         self.t = parent.t
         self.setWindowTitle(self.t(LABELS.get(name, name)) + " · " + self.t("参数"))
-        self.resize(470, 340)
+        self.resize(450, 320)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(12)
         self.fields = {}
         form = QFormLayout()
+        form.setVerticalSpacing(8)
+        form.setHorizontalSpacing(12)
         from .gui_parameters import valid_overrides
         overrides = valid_overrides(name, overrides)
         for key, spec in PARAMETERS.get(name, {}).items():
@@ -145,6 +160,7 @@ class ParameterDialog(QDialog):
         if not self.fields:
             layout.addWidget(text(self.t("此方法没有可调整的参数。")))
         layout.addLayout(form)
+        layout.addStretch()
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Reset)
         for flag, label in ((QDialogButtonBox.Ok, "确定"), (QDialogButtonBox.Cancel, "取消"), (QDialogButtonBox.Reset, "重置")):
             buttons.button(flag).setText(self.t(label))
@@ -195,6 +211,9 @@ class RunTableModel(QAbstractTableModel):
                       "convergence_status": "收敛状态", "epochs_trained": "实际轮数", "best_epoch": "最佳轮数",
                       "W2_n_samples": "W2 样本数", "W2_n_features": "W2 蛋白数", "W2_n_evaluated": "W2 评测数"}
             return self.t(labels.get(key, key))
+        if role == Qt.TextAlignmentRole and orientation == Qt.Horizontal:
+            key = self.columns[section]
+            return int(Qt.AlignRight | Qt.AlignVCenter) if key in NUMERIC_COLUMNS else int(Qt.AlignLeft | Qt.AlignVCenter)
 
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
@@ -205,14 +224,35 @@ class RunTableModel(QAbstractTableModel):
             if key == "status":
                 return self.t(STATE_LABELS.get(cell, cell or "—"))
             if key == "convergence_status":
-                return self.t({"validation_plateau":"验证已稳定", "max_epochs":"达到训练上限",
-                    "fixed_budget":"固定预算", "insufficient_validation":"验证数据不足",
-                    "not_applicable":"不适用", "not_assessed":"未评估"}.get(cell, cell or "—"))
-            return "—" if cell is None else f"{cell:.5g}" if isinstance(cell, float) else str(cell)
+                return self.t({"validation_plateau": "验证已稳定", "max_epochs": "达到训练上限",
+                    "fixed_budget": "固定预算", "insufficient_validation": "验证数据不足",
+                    "not_applicable": "不适用", "not_assessed": "未评估"}.get(cell, cell or "—"))
+            if cell is None:
+                return "—"
+            if isinstance(cell, float):
+                return f"{cell:.2f}" if key == "time_s" else f"{cell:.4f}"
+            return str(cell)
+        if role == Qt.TextAlignmentRole:
+            return int(Qt.AlignRight | Qt.AlignVCenter) if key in NUMERIC_COLUMNS else int(Qt.AlignLeft | Qt.AlignVCenter)
         if role == Qt.ToolTipRole:
-            return row.get("error") or row.get("W2_note") or ""
-        if role == Qt.ForegroundRole and key == "status" and cell != "completed":
-            return QColor("#a44128")
+            notes = []
+            if row.get("error"):
+                notes.append(str(row["error"]))
+            if row.get("W2_note"):
+                notes.append(str(row["W2_note"]))
+            if row.get("epochs_trained") is not None:
+                notes.append(f"{self.t('实际轮数')}: {row['epochs_trained']}")
+            if row.get("best_epoch") is not None:
+                notes.append(f"{self.t('最佳轮数')}: {row['best_epoch']}")
+            if row.get("W2_n_samples") is not None and row.get("W2_n_features") is not None:
+                notes.append(f"{self.t('W2 样本数')}: {row['W2_n_samples']} · {self.t('W2 蛋白数')}: {row['W2_n_features']}")
+            return "\n".join(notes)
+        if role == Qt.ForegroundRole and key == "status":
+            if cell == "completed":
+                return QColor("#15803D")
+            if cell in ("running", "cancelling"):
+                return QColor("#1D5FA7")
+            return QColor("#B91C1C")
 
 
 class RunTable(QTableView):
@@ -231,7 +271,7 @@ class MetricPlot(QWidget):
         super().__init__()
         self.t = translator
         from matplotlib import rcParams
-        rcParams["font.sans-serif"] = ["Microsoft YaHei", "DejaVu Sans"]
+        rcParams["font.sans-serif"] = ["Microsoft YaHei UI", "Microsoft YaHei", "DejaVu Sans"]
         rcParams["axes.unicode_minus"] = False
         # Select the native Qt binding, independent of PIMMS worker plotting.
         os.environ["QT_API"] = "pyside6"
@@ -239,18 +279,20 @@ class MetricPlot(QWidget):
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
         self.figure = Figure(figsize=(8, 4), dpi=100, layout="constrained", facecolor="white")
         self.canvas = FigureCanvasQTAgg(self.figure)
-        QVBoxLayout(self).addWidget(self.canvas)
+        plot_layout = QVBoxLayout(self)
+        plot_layout.setContentsMargins(0, 0, 0, 0)
+        plot_layout.addWidget(self.canvas)
         self.source = pd.DataFrame()
         self.provenance = {}
         self.empty(self.t("暂无可比较数据"))
 
     def empty(self, message):
-        self.setFixedHeight(300)
+        self.setFixedHeight(280)
         self.figure.clear()
         axes = self.figure.add_subplot()
         axes.axis("off")
         # Qt label carries localized explanatory text; plot keeps portable fonts.
-        axes.text(0.5, 0.5, self.t("暂无可比较数据"), ha="center", va="center", color="#68768c")
+        axes.text(0.5, 0.5, self.t("暂无可比较数据"), ha="center", va="center", color="#64748B", fontsize=11)
         self.canvas.draw_idle()
         self.setToolTip(message)
         self.source = pd.DataFrame()
@@ -268,28 +310,47 @@ class MetricPlot(QWidget):
             return 0
         stats = frame.groupby("method")[metric].agg(["mean", "std", "count"])
         stats = stats.sort_values("mean", ascending=metric not in ("Pearson", "Spearman"))
-        self.setFixedHeight(max(300, len(stats) * 28 + 140))
+        self.setFixedHeight(max(280, len(stats) * 32 + 120))
         self.figure.clear()
         axes = self.figure.add_subplot()
         positions = np.arange(len(stats))
-        colors = ["#375fc7" if name.startswith("jingwei") else "#557e9b" for name in stats.index]
-        axes.barh(positions, stats["mean"], color=colors, height=0.64)
+        colors = ["#1D5FA7" if name.startswith("jingwei") else "#64748B" for name in stats.index]
+        bars = axes.barh(positions, stats["mean"], color=colors, height=0.58)
+        multi_repeats = bool((stats["count"] > 1).any())
+        show_counts = multi_repeats or stats["count"].nunique() > 1
         for i, row in enumerate(stats.itertuples()):
             if np.isfinite(row.std):
-                axes.errorbar(row.mean, i, xerr=row.std, fmt="none", color="#17253c", capsize=3, lw=1)
-        axes.set_yticks(positions, [f"{name}  (n={int(count)})" for name, count in zip(stats.index, stats["count"])], fontsize=9)
+                axes.errorbar(row.mean, i, xerr=row.std, fmt="none", color="#0F172A", capsize=3, lw=1)
+        tick_labels = [f"{name}  (n={int(count)})" if show_counts else str(name)
+                       for name, count in zip(stats.index, stats["count"])]
+        axes.set_yticks(positions, tick_labels, fontsize=9.5, color="#1E293B")
         axes.invert_yaxis()
-        axes.axvline(0, color="#8693a8", linewidth=0.6)
+        axes.axvline(0, color="#CBD5E1", linewidth=0.8)
         axes.set_axisbelow(True)
-        axes.grid(axis="x", color="#e9edf4", linewidth=0.7)
+        axes.grid(axis="x", color="#F1F5F9", linewidth=0.8)
         for side in ("top", "right", "left"):
             axes.spines[side].set_visible(False)
+        axes.spines["bottom"].set_color("#CBD5E1")
+        axes.tick_params(axis="x", colors="#475569", labelsize=9)
+        axes.tick_params(axis="y", length=0)
+        max_val = float((stats["mean"] + stats["std"].fillna(0)).max())
+        min_val = float((stats["mean"] - stats["std"].fillna(0)).min())
         if metric not in ("Pearson", "Spearman"):
-            axes.set_xlim(left=0)
-        units = self.t("秒") if metric == "time_s" else f"({scale})²" if metric == "MSE" else scale if metric in ("MAE", "RMSE", "W2") else self.t("无量纲")
-        axes.set_xlabel(f"{metric} ({units})")
-        axes.set_title(self.t("共同完整重复" if paired else "各方法成功运行"), loc="left", fontsize=11)
-        self.figure.supxlabel(self.t("均值 ± 标准差（n ≥ 2）"), fontsize=8, color="#59677e")
+            axes.set_xlim(left=0, right=max_val * 1.14 if max_val > 0 else 1.0)
+        else:
+            span = max(abs(max_val), abs(min_val), 0.1)
+            axes.set_xlim(left=min(0.0, min_val - 0.08 * span), right=max_val + 0.14 * span)
+        if not multi_repeats:
+            axes.bar_label(bars, fmt="%.4g", padding=5, fontsize=8.5, color="#334155")
+        scale_display = self.t("原始丰度") if scale == "raw" else (scale if scale and scale != "working" else "log2")
+        units = (self.t("秒") if metric == "time_s"
+                 else f"{scale_display}²" if metric == "MSE"
+                 else scale_display if metric in ("MAE", "RMSE", "W2")
+                 else self.t("无量纲"))
+        axes.set_xlabel(f"{metric} ({units})", fontsize=9.5, color="#334155")
+        axes.set_title(self.t("共同完整重复" if paired else "各方法成功运行"), loc="left", fontsize=11, color="#0F172A", pad=8)
+        if multi_repeats:
+            self.figure.supxlabel(self.t("均值 ± 标准差（n ≥ 2）"), fontsize=8, color="#64748B")
         self.canvas.draw_idle()
         self.source = frame
         self.provenance = {"job_id": job_id, "metric": metric, "scale": scale,
@@ -324,6 +385,9 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self._startup_pending = startup
         self._environment_error = None
         self._session_jobs = set()
+        self._status_timer = QTimer(self)
+        self._status_timer.setSingleShot(True)
+        self._status_timer.timeout.connect(lambda: self.status_notice.clear())
         self.setup_ui()
         restored_input = self.restore_session(load_input=load_default)
         self.timer = QTimer(self)
@@ -337,6 +401,10 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             if path := default_input_path():
                 self.set_input(path)
         self.connect_session()
+
+    def flash_status(self, message, duration_ms=5000):
+        self.status_notice.setText(message)
+        self._status_timer.start(duration_ms)
 
     def background(self, function, done, *args, error=None):
         task = BackgroundTask(function, *args)
@@ -399,7 +467,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             try:
                 save_environment(cache, identity, result)
             except OSError as exc:
-                self.statusBar().showMessage(str(exc), 5000)
+                self.flash_status(str(exc))
             self.apply_environment(result)
         def failed(message):
             if generation != self._environment_generation:
@@ -416,8 +484,12 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         states, gpu, self._gpu_name = result
         self.backend_states = {name: dict(state) for name, state in states.items()}
         self._environment_checking = False
+        prev_tree = self.method_tree.blockSignals(True)
         for name, box in self.method_checks.items():
-            box.setEnabled(self.backend_states[name]["available"])
+            available = self.backend_states[name]["available"]
+            box.setEnabled(available or box.isChecked())
+        self.method_tree.blockSignals(prev_tree)
+        self.update_method_count()
         self.update_environment_labels()
         if "gpu_id" in self.fields:
             index = self.fields["device"].findData("cuda")
@@ -441,6 +513,12 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
     def device_changed(self):
         if "gpu_id" in self.fields:
             self.fields["gpu_id"].setEnabled(value(self.fields["device"]) != "cpu")
+
+    def training_policy_changed(self):
+        converge = value(self.fields["training_policy"]) == "convergence"
+        for key in ("patience", "min_epochs", "min_delta", "validation_fraction"):
+            if key in self.fields:
+                self.fields[key].setEnabled(converge)
 
     def mode_changed(self):
         benchmark = value(self.fields["command"]) == "benchmark"
@@ -520,11 +598,15 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
 
     def input_options(self):
         keys = ("orientation", "layer", "index_column", "header", "missing_values", "scale", "transform", "max_dense_mb")
-        options = {key: value(self.fields[key]) for key in keys}
-        return options
+        return {key: value(self.fields[key]) for key in keys}
 
     def signature(self):
-        path = Path(self.input_path.text()).resolve()
+        raw = self.input_path.text().strip()
+        if not raw:
+            raise FileNotFoundError(self.t("请选择有效的 CSV 或 h5ad 文件"))
+        path = Path(raw).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(self.t("请选择有效的 CSV 或 h5ad 文件"))
         stat = path.stat()
         return str(path), stat.st_size, stat.st_mtime_ns, self.input_options()
 
@@ -536,19 +618,18 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             return
         self._inspect_generation += 1
         generation = self._inspect_generation
-        self.inspect_button.setEnabled(False)
         self._inspecting = True
         self.update_run_state()
         self.update_data_labels()
         def done(data):
             if generation != self._inspect_generation:
                 return
-            self.inspect_button.setEnabled(True)
             self.preview_data = data
             self.preview_signature = signature
             if self._pending_features and self._pending_features[0] == signature:
                 available = set(data["feature_ids"])
-                self.feature_selection = [name for name in self._pending_features[1] if name in available] or None
+                selected = [name for name in self._pending_features[1] if name in available]
+                self.feature_selection = None if (not selected or len(selected) == len(data["feature_ids"])) else selected
                 self._pending_features = None
             self._inspecting = False
             self.update_run_state()
@@ -563,7 +644,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
                     cell = preview.iloc[i, j]
                     item = QTableWidgetItem("—" if not np.isfinite(cell) else f"{cell:.4g}")
                     if not np.isfinite(cell):
-                        item.setBackground(QColor("#fff0e6"))
+                        item.setBackground(QColor("#FFF0E6"))
                     self.preview_table.setItem(i, j, item)
             layer = self.fields["layer"]
             current = layer.currentData()
@@ -577,7 +658,6 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         def failure(message):
             if generation != self._inspect_generation:
                 return
-            self.inspect_button.setEnabled(True)
             self._inspecting = False
             self.preview_data = None
             self.preview_signature = None
@@ -588,8 +668,15 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
 
     def select_methods(self, names):
         names = set(names if names is not None else [name for name, state in self.backend_states.items() if state["available"]])
+        prev_tree = self.method_tree.blockSignals(True)
         for name, box in self.method_checks.items():
-            box.setChecked(name in names and box.isEnabled())
+            available = self.backend_states.get(name, {}).get("available", box.isEnabled())
+            box.setChecked(name in names and available)
+            box.setEnabled(available)
+        self.method_tree.blockSignals(prev_tree)
+        self.update_method_count()
+        if hasattr(self, "_session_timer"):
+            self.remember_session()
 
     def edit_parameters(self, name):
         if self.configuration_locked():
@@ -615,21 +702,31 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             return
         dialog = QDialog(self)
         dialog.setWindowTitle(self.t("W2 的共同参考蛋白"))
-        dialog.resize(430, 560)
+        dialog.resize(440, 560)
         layout = QVBoxLayout(dialog)
         layout.addWidget(text(self.t("选择共同蛋白子集；仅在该子集上原始完整的样本进入 W2。"), "muted"))
+        top_bar = QHBoxLayout()
         search = QLineEdit()
         search.setPlaceholderText(self.t("搜索蛋白名称"))
-        layout.addWidget(search)
+        top_bar.addWidget(search, 1)
         listing = QListWidget()
-        chosen = set(self.feature_selection or self.preview_data["feature_ids"])
-        for name in self.preview_data["feature_ids"]:
+        all_btn = QPushButton(self.t("全选"))
+        none_btn = QPushButton(self.t("清空"))
+        all_btn.clicked.connect(lambda: [listing.item(i).setCheckState(Qt.Checked) for i in range(listing.count()) if not listing.item(i).isHidden()])
+        none_btn.clicked.connect(lambda: [listing.item(i).setCheckState(Qt.Unchecked) for i in range(listing.count()) if not listing.item(i).isHidden()])
+        top_bar.addWidget(all_btn)
+        top_bar.addWidget(none_btn)
+        layout.addLayout(top_bar)
+        feature_ids = self.preview_data["feature_ids"]
+        chosen = set(self.feature_selection) if self.feature_selection else set(feature_ids)
+        for name in feature_ids:
             item = QListWidgetItem(str(name))
+            item.setData(Qt.UserRole, name)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked if name in chosen else Qt.Unchecked)
             listing.addItem(item)
         search.textChanged.connect(lambda query: [listing.item(i).setHidden(query.lower() not in listing.item(i).text().lower()) for i in range(listing.count())])
-        layout.addWidget(listing)
+        layout.addWidget(listing, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText(self.t("确定"))
         buttons.button(QDialogButtonBox.Cancel).setText(self.t("取消"))
@@ -637,11 +734,11 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         if dialog.exec() == QDialog.Accepted:
-            selection = [listing.item(i).text() for i in range(listing.count()) if listing.item(i).checkState() == Qt.Checked]
+            selection = [listing.item(i).data(Qt.UserRole) for i in range(listing.count()) if listing.item(i).checkState() == Qt.Checked]
             if not selection:
                 self.show_error(self.t("至少选择一个蛋白"))
                 return
-            self.feature_selection = selection
+            self.feature_selection = None if len(selection) == len(feature_ids) else selection
             self.update_data_labels()
             self.remember_session()
 
@@ -695,8 +792,19 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             self._submitting = False
             self.update_run_state()
             self.show_error(message)
-        self.background(lambda *a: self.store.submit(*a, output_root=output_root), done, self.input_path.text(), config,
+        self.background(lambda *a: self.store.submit(*a, output_root=output_root), done, self.input_path.text().strip(), config,
                         parameters, self.job_name.text(), error=failure)
+
+    def _style_status_pill(self, state):
+        palette = {
+            "completed": ("#DCFCE7", "#15803D"),
+            "running": ("#E8F1FB", "#1D5FA7"),
+            "cancelling": ("#FEF3C7", "#B45309"),
+        }
+        bg, fg = palette.get(state, ("#FEE2E2", "#B91C1C"))
+        self.progress_label.setStyleSheet(
+            f"background:{bg};color:{fg};border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;"
+        )
 
     def refresh_jobs(self):
         self.update_run_state()
@@ -704,6 +812,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             button.setEnabled(bool(self.selected_job) and (button is not self.clone_button or not self.configuration_locked()))
         if not self.selected_job:
             self.cancel_button.setEnabled(False)
+            self.progress.hide()
             return
         try:
             info = self.store.info(self.selected_job)
@@ -711,15 +820,24 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             self.selected_job = None
             self._last_result_digest = None
             self.current_task_label.setText(self.t("尚无任务"))
+            self.current_task_label.setObjectName("muted")
             self.progress_label.setText(self.t("任务目录无法读取，请重新打开任务。"))
+            self._style_status_pill("failed")
+            self.progress_label.show()
+            self.progress.hide()
             self.log_view.setPlainText(self.t("任务目录无法读取，请重新打开任务。"))
             self.run_model.replace([], self.run_model.columns)
             self.plot.empty(self.t("暂无可比较数据"))
+            self.result_notice.clear()
+            self.result_notice.hide()
             self.cancel_button.setEnabled(False)
             for button in self.job_actions:
                 button.setEnabled(False)
             return
         self.current_task_label.setText(info["name"])
+        self.current_task_label.setObjectName("taskTitle")
+        self.current_task_label.style().unpolish(self.current_task_label)
+        self.current_task_label.style().polish(self.current_task_label)
         self.current_task_label.setToolTip(info["folder"])
         if info["id"] in self._session_jobs and not self._environment_retry_used:
             environment_errors = ("cuda requested but unavailable", "rscript not found", "missing r packages", "r dependency check failed",
@@ -730,7 +848,10 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
                 self.refresh_environment(force=True)
         self.progress.setRange(0, max(1, info["expected"]))
         self.progress.setValue(info["done"])
+        self.progress.setVisible(info["state"] in ("running", "cancelling"))
+        self._style_status_pill(info["state"])
         self.progress_label.setText(self.t("{state} · {done}/{total}", state=self.t(STATE_LABELS[info["state"]]), done=info["done"], total=info["expected"]))
+        self.progress_label.show()
         self.cancel_button.setEnabled(info["state"] == "running" and info["id"] in self.store._processes)
         digest = (info["id"], info["done"], info["state"])
         if digest != self._last_result_digest:
@@ -743,9 +864,17 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             return
         info = self.store.info(self.selected_job)
         runs = pd.DataFrame(info["runs"])
-        columns = ["repeat", "method", "status", "convergence_status", "epochs_trained", "best_epoch", "MSE", "RMSE", "MAE", "NRMSE", "Pearson", "Spearman", "W2", "W2_n_samples", "W2_n_features", "W2_n_evaluated", "time_s"]
-        self.run_model.replace(info["runs"], columns)
         benchmark = info["config"].get("command") == "benchmark"
+        if benchmark:
+            show_best = (info["config"].get("training_policy") == "convergence"
+                         or any(row.get("best_epoch") is not None for row in info["runs"]))
+            columns = ["repeat", "method", "status", "MSE", "RMSE", "MAE", "NRMSE",
+                       "Pearson", "Spearman", "W2", *(["best_epoch"] if show_best else []), "time_s"]
+        else:
+            columns = ["repeat", "method", "status", "epochs_trained", "time_s"]
+        self.run_model.replace(info["runs"], columns)
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.result_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         multiple = info["config"].get("repeats", 1) > 1
         self.paired.setVisible(benchmark and multiple)
         self.paired.setEnabled(benchmark and multiple)
@@ -759,7 +888,10 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         else:
             scores = runs
         metric = self.metric_choice.currentData()
-        count = self.plot.render(scores, metric, info["manifest"].get("evaluation_scale", "working"), paired, info["id"])
+        eval_scale = info["manifest"].get("evaluation_scale")
+        if not eval_scale or eval_scale == "working":
+            eval_scale = evaluation_scale_name(info["config"])
+        count = self.plot.render(scores, metric, eval_scale, paired, info["id"])
         if count:
             self.plot.provenance.update(input_sha256=info["manifest"].get("input_sha256"),
                 language=self.language,
@@ -767,12 +899,13 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
                 candidate_rows=len(scores), included_rows=len(self.plot.source),
                 W2_definition="multivariate empirical sample distribution on common complete reference features")
         failed = sum(row.get("status") != "completed" for row in info["runs"])
-        message = self.t("{count} 种方法 · {failed} 条未完成/失败记录", count=count, failed=failed)
-        if not benchmark:
-            message = (self.t("{count} 种方法 · {failed} 条未完成/失败记录",
-                              count=len(info["runs"]), failed=failed) if failed else "")
-        elif not count:
-            message = self.t("暂无可比较数据") + " · " + message
+        if failed:
+            message = self.t("{count} 种方法 · {failed} 条未完成/失败记录",
+                             count=count if benchmark else len(info["runs"]), failed=failed)
+        elif benchmark and not count:
+            message = self.t("暂无可比较数据")
+        else:
+            message = ""
         self.result_notice.setText(message)
         self.result_notice.setVisible(bool(message))
         self.show_method_log()
@@ -835,7 +968,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             return
         path = QFileDialog.getSaveFileName(self, self.t("导出完整任务"), "JINGWEI-results.zip", "ZIP (*.zip)")[0]
         if path:
-            self.background(self.store.export, lambda result: self.statusBar().showMessage(self.t("完整任务已导出"), 5000), self.selected_job, path)
+            self.background(self.store.export, lambda result: self.flash_status(self.t("完整任务已导出")), self.selected_job, path)
 
     def export_plot(self):
         if self.plot.source.empty:
@@ -849,7 +982,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             self.plot.source.to_csv(str(Path(path).with_suffix(".source.csv")), index=False)
             from .gui_jobs import write_json
             write_json(Path(path).with_suffix(".provenance.json"), self.plot.provenance)
-            self.statusBar().showMessage(self.t("图表、源数据和计算说明已导出"), 5000)
+            self.flash_status(self.t("图表、源数据和计算说明已导出"))
         except Exception as exc:
             self.show_error(str(exc))
 
@@ -881,9 +1014,13 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         # Keep the recorded selection even if a newly selected runtime has not
         # finished probing availability yet.
         for name, box in self.method_checks.items():
-            box.setChecked(name in methods)
+            checked = name in methods
+            box.setChecked(checked)
+            if checked:
+                box.setEnabled(True)
         self.mode_changed()
         self.device_changed()
+        self.training_policy_changed()
         set_value(self.fields["output_scale"], info["config"].get("output_scale", "working"))
         self.output_root.setText(str(Path(info["folder"]).parent))
         self.job_name.setText(info["name"] + " · " + self.t("副本"))
@@ -941,6 +1078,10 @@ def launch(workspace=None):
     from .windows_identity import set_process_app_id, apply_application_icon
     set_process_app_id()
     app = QApplication.instance() or QApplication(["jingwei"])
+    if os.name == "nt":
+        font_id = QFontDatabase.addApplicationFont("C:/Windows/Fonts/msyh.ttc")
+        families = QFontDatabase.applicationFontFamilies(font_id)
+        app.setFont(QFont(families[0] if families else "Microsoft YaHei UI", 10))
     apply_application_icon(app)
     store = JobStore(workspace)
     lock = QLockFile(str(store.root / "desktop.lock"))

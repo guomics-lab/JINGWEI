@@ -19,6 +19,13 @@ class StartupGate(QObject):
         if hidden:
             self.panel.setAttribute(Qt.WA_DontShowOnScreen, True)
             window.setAttribute(Qt.WA_DontShowOnScreen, True)
+        self.panel.setStyleSheet(
+            "QWidget {background:#FFFFFF;color:#1E293B;font-family:'Microsoft YaHei UI','Segoe UI',sans-serif;font-size:12px;}"
+            "QPushButton {background:#FFFFFF;border:1px solid #CBD5E1;border-radius:5px;padding:5px 12px;}"
+            "QPushButton:hover {background:#F1F5F9;border-color:#94A3B8;}"
+            "QProgressBar {border:1px solid #E2E8F0;border-radius:3px;background:#F8FAFC;max-height:8px;}"
+            "QProgressBar::chunk {background:#1D5FA7;border-radius:2px;}"
+        )
         layout = QVBoxLayout(self.panel)
         layout.setContentsMargins(24, 20, 24, 20)
         heading = QHBoxLayout()
@@ -65,7 +72,7 @@ class StartupGate(QObject):
         if self.window._environment_checking:
             return
         if self.window._environment_error:
-            self.message.setText(self.window.t("计算环境检查失败") + "\n" + self.window._environment_error[-500:])
+            self.message.setText(self.window.t("计算环境检查失败") + "\n" + self.window.t(self.window._environment_error[-500:]))
             self.progress.hide()
             self.retry_button.show()
             return

@@ -197,3 +197,58 @@ def test_blank_task_name_is_shown_as_timestamp_in_the_workbench(window):
     assert win.current_task_label.text()==name
     until(app,lambda:win.store.info(win.selected_job)['state'] in TERMINAL)
     assert not errors
+
+
+def test_streamlined_controls_and_boundary_guards(window,tmp_path):
+    from PySide6.QtWidgets import QStatusBar
+    from jingwei_benchmark.gui_jobs import make_argv
+    from jingwei_benchmark.protocol import JINGWEI_MECHANISM
+    app,win,source,errors=window
+
+    # Redundant duplicate dialog/manual-check buttons are absent in both languages.
+    for language in ('zh','en'):
+        win.set_language(language)
+        main_buttons={b.text() for b in win.centralWidget().findChildren(QPushButton)}
+        assert not {'计算环境','Runtime','导入设置','Import settings','检查','Check','示例','Example'} & main_buttons
+
+    # Empty or directory paths never resolve to CWD during signature check.
+    win.input_path.setText('')
+    with pytest.raises(FileNotFoundError):
+        win.signature()
+    win.input_path.setText(str(tmp_path))
+    with pytest.raises(FileNotFoundError):
+        win.signature()
+    win.set_input(source)
+    until(app,lambda:win.preview_data is not None)
+
+    # MNAR v2 enables logistic_slope and prevents invalid zero slope after switching from mnar-logistic.
+    win.fields['mechanism'].setCurrentIndex(win.fields['mechanism'].findData('mnar-logistic'))
+    set_value(win.fields['logistic_slope'],0.0)
+    win.fields['mechanism'].setCurrentIndex(win.fields['mechanism'].findData(JINGWEI_MECHANISM))
+    assert win.fields['logistic_slope'].isEnabled()
+    assert win.configuration()['logistic_slope']<0
+    assert JINGWEI_MECHANISM in make_argv(win.configuration(),source,tmp_path/'out')
+
+    # Impute mode allows 0% training mask rate, while Benchmark enforces > 0%.
+    win.fields['command'].setCurrentIndex(win.fields['command'].findData('impute'))
+    set_value(win.fields['mask_rate'],0.0)
+    assert win.configuration()['mask_rate']==0.0
+    win.fields['command'].setCurrentIndex(win.fields['command'].findData('benchmark'))
+    assert win.configuration()['mask_rate']>0.0
+
+    # Unavailable checked methods can be unchecked by the user and then lock as disabled.
+    states={name:dict(state) for name,state in win.backend_states.items()}
+    states['missforest']['available']=False
+    states['missforest']['reason']='R missing'
+    win.method_checks['missforest'].setChecked(True)
+    win.apply_environment((states,False,None))
+    assert win.method_checks['missforest'].isEnabled() and win.method_checks['missforest'].isChecked()
+    win.method_checks['missforest'].setChecked(False)
+    app.processEvents()
+    assert not win.method_checks['missforest'].isEnabled()
+
+    # Transient status notices use the integrated footer instead of spawning QStatusBar.
+    win.flash_status('Saved')
+    assert win.status_notice.text()=='Saved'
+    assert win.findChild(QStatusBar) is None
+    assert not errors
