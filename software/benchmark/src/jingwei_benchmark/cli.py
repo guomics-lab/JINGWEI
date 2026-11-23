@@ -226,12 +226,17 @@ def main(argv=None):
             "batch_size",
             "cf_batch_size",
             "latent_dim",
+            "dmf_rank",
             "timeout",
         ):
             if getattr(args, name) <= 0:
                 raise ValueError(f"--{name.replace('_','-')} must be positive")
         if args.seed < 0 or any(d <= 0 for d in args.hidden_dims):
             raise ValueError("seed must be nonnegative and hidden dimensions positive")
+        if not math.isfinite(args.learning_rate) or args.learning_rate <= 0:
+            raise ValueError("--learning-rate must be positive and finite")
+        if not math.isfinite(args.mask_weight) or args.mask_weight < 0:
+            raise ValueError("--mask-weight must be nonnegative and finite")
         if not math.isfinite(args.validation_fraction) or not 0 < args.validation_fraction < 1:
             raise ValueError("--validation-fraction must be between 0 and 1")
         if not math.isfinite(args.min_delta) or not 0 <= args.min_delta < 1:

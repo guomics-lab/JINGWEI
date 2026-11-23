@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 APP_USER_MODEL_ID = "JINGWEI.Benchmark.Desktop"
+_ICON_IMAGES = None
 
 
 def set_process_app_id():
@@ -23,23 +24,29 @@ def set_process_app_id():
 
 def application_icon():
     """Use the unmodified JINGWEI bird at the sizes Windows requests."""
+    global _ICON_IMAGES
     from PySide6.QtCore import QSize, Qt
     from PySide6.QtGui import QIcon, QImageReader, QPixmap
-    reader = QImageReader(str(Path(__file__).with_name("assets") / "Jingwei_logo.png"))
-    reader.setScaledSize(QSize(256, 256))
-    # PNG readers may still allocate the original 8334 × 8334 image internally.
-    # This is a trusted, bundled asset; restore Qt's process-wide limit afterwards.
-    limit = QImageReader.allocationLimit()
-    try:
-        QImageReader.setAllocationLimit(512)
-        image = reader.read()
-    finally:
-        QImageReader.setAllocationLimit(limit)
-    if image.isNull():
-        raise RuntimeError(f"Cannot load JINGWEI icon: {reader.errorString()}")
+    if _ICON_IMAGES is None:
+        reader = QImageReader(str(Path(__file__).with_name("assets") / "Jingwei_logo.png"))
+        reader.setScaledSize(QSize(256, 256))
+        # PNG readers may still allocate the original 8334 × 8334 image internally.
+        # This is a trusted, bundled asset; restore Qt's process-wide limit afterwards.
+        limit = QImageReader.allocationLimit()
+        try:
+            QImageReader.setAllocationLimit(512)
+            image = reader.read()
+        finally:
+            QImageReader.setAllocationLimit(limit)
+        if image.isNull():
+            raise RuntimeError(f"Cannot load JINGWEI icon: {reader.errorString()}")
+        _ICON_IMAGES = tuple(
+            image.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            for size in (16, 20, 24, 32, 48, 64, 128, 256)
+        )
     icon = QIcon()
-    for size in (16, 20, 24, 32, 48, 64, 128, 256):
-        icon.addPixmap(QPixmap.fromImage(image.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
+    for scaled in _ICON_IMAGES:
+        icon.addPixmap(QPixmap.fromImage(scaled))
     return icon
 
 

@@ -66,6 +66,13 @@ def control(spec):
     return widget
 
 
+def clean_path_text(raw):
+    text = str(raw or "").strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ('"', "'"):
+        text = text[1:-1].strip()
+    return text
+
+
 def value(widget):
     if isinstance(widget, QComboBox):
         return widget.currentData()
@@ -260,7 +267,10 @@ class RunTable(QTableView):
         return self.model().rowCount()
 
     def currentRow(self):
-        return self.currentIndex().row()
+        if self.currentIndex().isValid():
+            return self.currentIndex().row()
+        selected = self.selectionModel().selectedIndexes() if self.selectionModel() else []
+        return selected[0].row() if selected else -1
 
     def selectedItems(self):
         return self.selectionModel().selectedIndexes()
@@ -306,7 +316,14 @@ class MetricPlot(QWidget):
         frame[metric] = pd.to_numeric(frame[metric], errors="coerce")
         frame = frame[np.isfinite(frame[metric])]
         if frame.empty:
-            self.empty(self.t("W2 比较样本的多维蛋白分布；仅使用所选蛋白上原始完整的参考样本。未定义值留空。"))
+            note = (
+                "W2 比较样本的多维蛋白分布；仅使用所选蛋白上原始完整的参考样本。未定义值留空。"
+                if metric == "W2"
+                else "当前指标无有效数值（例如常数预测的相关系数未定义）。"
+                if metric in ("Pearson", "Spearman")
+                else "暂无可比较数据"
+            )
+            self.empty(self.t(note))
             return 0
         stats = frame.groupby("method")[metric].agg(["mean", "std", "count"])
         stats = stats.sort_values("mean", ascending=metric not in ("Pearson", "Spearman"))
@@ -374,6 +391,9 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self.selected_job = None
         self._last_result_digest = None
         self._inspect_generation = 0
+        self._inspect_error = None
+        self._benchmark_metric = "MSE"
+        self._auto_time_metric = False
         self._submitting = False
         self._closed = False
         self._pending_features = None
@@ -439,7 +459,10 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         cancel = self._environment_cancel
         self._environment_generation += 1
         generation = self._environment_generation
-        options = {key: value(self.fields[key]) or None for key in ("rscript", "r_library", "naguider_source", "dreamai_source", "mice_backend")}
+        options = {
+            key: (clean_path_text(value(self.fields[key])) or None) if key != "mice_backend" else (value(self.fields[key]) or None)
+            for key in ("rscript", "r_library", "naguider_source", "dreamai_source", "mice_backend")
+        }
         identity = environment_identity(options)
         cache = self.store.root / "environment.json"
         result = None if force else load_environment(cache, identity)
@@ -489,6 +512,11 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             available = self.backend_states[name]["available"]
             box.setEnabled(available or box.isChecked())
         self.method_tree.blockSignals(prev_tree)
+        checked_names = [name for name, box in self.method_checks.items() if box.isChecked()]
+        if checked_names and len(checked_names) < len(self.method_checks):
+            self._sync_method_tree_selection(checked_names)
+        else:
+            self.current_method_changed(self.method_tree.currentItem())
         self.update_method_count()
         self.update_environment_labels()
         if "gpu_id" in self.fields:
@@ -529,6 +557,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self._pending_features = None
         self._inspect_generation += 1
         self._inspecting = False
+        self._inspect_error = None
         self.preview_data = None
         self.preview_signature = None
         self.feature_selection = None
@@ -541,12 +570,12 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             self.set_input(path)
 
     def choose_output(self):
-        path = QFileDialog.getExistingDirectory(self, self.t("选择输出目录"), self.output_root.text())
+        path = QFileDialog.getExistingDirectory(self, self.t("选择输出目录"), clean_path_text(self.output_root.text()))
         if path:
             self.output_root.setText(path)
 
     def choose_task(self):
-        path = QFileDialog.getExistingDirectory(self, self.t("打开任务目录"), self.output_root.text())
+        path = QFileDialog.getExistingDirectory(self, self.t("打开任务目录"), clean_path_text(self.output_root.text()))
         if path:
             self.open_task(path)
 
@@ -601,7 +630,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         return {key: value(self.fields[key]) for key in keys}
 
     def signature(self):
-        raw = self.input_path.text().strip()
+        raw = clean_path_text(self.input_path.text())
         if not raw:
             raise FileNotFoundError(self.t("请选择有效的 CSV 或 h5ad 文件"))
         path = Path(raw).resolve()
@@ -619,11 +648,13 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self._inspect_generation += 1
         generation = self._inspect_generation
         self._inspecting = True
+        self._inspect_error = None
         self.update_run_state()
         self.update_data_labels()
         def done(data):
             if generation != self._inspect_generation:
                 return
+            self._inspect_error = None
             self.preview_data = data
             self.preview_signature = signature
             if self._pending_features and self._pending_features[0] == signature:
@@ -659,10 +690,11 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             if generation != self._inspect_generation:
                 return
             self._inspecting = False
+            self._inspect_error = message
             self.preview_data = None
             self.preview_signature = None
             self.update_run_state()
-            self.data_summary.setText(self.t("数据检查失败：{error}", error=message))
+            self.update_data_labels()
             self.show_error(message)
         self.background(inspect_input, done, signature[0], signature[3], error=failure)
 
@@ -674,6 +706,11 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             box.setChecked(name in names and available)
             box.setEnabled(available)
         self.method_tree.blockSignals(prev_tree)
+        checked_names = [name for name, box in self.method_checks.items() if box.isChecked()]
+        if checked_names and len(checked_names) < len(self.method_checks):
+            self._sync_method_tree_selection(checked_names)
+        else:
+            self.current_method_changed(self.method_tree.currentItem())
         self.update_method_count()
         if hasattr(self, "_session_timer"):
             self.remember_session()
@@ -705,13 +742,22 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         dialog.resize(440, 560)
         layout = QVBoxLayout(dialog)
         layout.addWidget(text(self.t("选择共同蛋白子集；仅在该子集上原始完整的样本进入 W2。"), "muted"))
+        class _SearchEdit(QLineEdit):
+            def keyPressEvent(self, event):
+                if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                    event.accept()
+                    return
+                super().keyPressEvent(event)
+
         top_bar = QHBoxLayout()
-        search = QLineEdit()
+        search = _SearchEdit()
         search.setPlaceholderText(self.t("搜索蛋白名称"))
         top_bar.addWidget(search, 1)
         listing = QListWidget()
         all_btn = QPushButton(self.t("全选"))
         none_btn = QPushButton(self.t("清空"))
+        all_btn.setAutoDefault(False)
+        none_btn.setAutoDefault(False)
         all_btn.clicked.connect(lambda: [listing.item(i).setCheckState(Qt.Checked) for i in range(listing.count()) if not listing.item(i).isHidden()])
         none_btn.clicked.connect(lambda: [listing.item(i).setCheckState(Qt.Unchecked) for i in range(listing.count()) if not listing.item(i).isHidden()])
         top_bar.addWidget(all_btn)
@@ -728,17 +774,26 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         search.textChanged.connect(lambda query: [listing.item(i).setHidden(query.lower() not in listing.item(i).text().lower()) for i in range(listing.count())])
         layout.addWidget(listing, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText(self.t("确定"))
-        buttons.button(QDialogButtonBox.Cancel).setText(self.t("取消"))
-        buttons.accepted.connect(dialog.accept)
+        ok_btn = buttons.button(QDialogButtonBox.Ok)
+        cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+        ok_btn.setText(self.t("确定"))
+        cancel_btn.setText(self.t("取消"))
+        ok_btn.setAutoDefault(False)
+        ok_btn.setDefault(False)
+        cancel_btn.setAutoDefault(False)
+        chosen_result = []
+        def accept_selection():
+            selected = [listing.item(i).data(Qt.UserRole) for i in range(listing.count()) if listing.item(i).checkState() == Qt.Checked]
+            if not selected:
+                self.show_error(self.t("至少选择一个蛋白"))
+                return
+            chosen_result[:] = selected
+            dialog.accept()
+        buttons.accepted.connect(accept_selection)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         if dialog.exec() == QDialog.Accepted:
-            selection = [listing.item(i).data(Qt.UserRole) for i in range(listing.count()) if listing.item(i).checkState() == Qt.Checked]
-            if not selection:
-                self.show_error(self.t("至少选择一个蛋白"))
-                return
-            self.feature_selection = None if len(selection) == len(feature_ids) else selection
+            self.feature_selection = None if len(chosen_result) == len(feature_ids) else list(chosen_result)
             self.update_data_labels()
             self.remember_session()
 
@@ -752,7 +807,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         if "gpu_id" in config and (config["gpu_id"] == -1 or config["device"] == "cpu"):
             config["gpu_id"] = None
         for key in ("rscript", "r_library", "naguider_source", "dreamai_source"):
-            config[key] = config[key] or None
+            config[key] = clean_path_text(config[key]) or None
         config["repeats"] = 1
         config["evaluation_protocol"] = "fair"
         config["seed"] = 0
@@ -768,7 +823,8 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             if not self.preview_data or self.signature() != self.preview_signature:
                 raise ValueError(self.t("数据或读取设置已改变，请重新检查数据"))
             config = self.configuration()
-            if not self.output_root.text().strip():
+            output_root = clean_path_text(self.output_root.text())
+            if not output_root:
                 raise ValueError(self.t("请选择输出目录"))
         except (ValueError, OSError) as exc:
             self.show_error(str(exc))
@@ -777,7 +833,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             return
         self._submitting = True
         self.update_run_state()
-        output_root = self.output_root.text().strip()
+        input_path = clean_path_text(self.input_path.text())
         parameters = {} if config["evaluation_protocol"] == "original-notebook" else {
             name: settings for name, settings in self.method_parameters.items() if name in config["methods"]}
         def done(job_id):
@@ -792,7 +848,7 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             self._submitting = False
             self.update_run_state()
             self.show_error(message)
-        self.background(lambda *a: self.store.submit(*a, output_root=output_root), done, self.input_path.text().strip(), config,
+        self.background(lambda *a: self.store.submit(*a, output_root=output_root), done, input_path, config,
                         parameters, self.job_name.text(), error=failure)
 
     def _style_status_pill(self, state):
@@ -808,9 +864,9 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
 
     def refresh_jobs(self):
         self.update_run_state()
-        for button in self.job_actions:
-            button.setEnabled(bool(self.selected_job) and (button is not self.clone_button or not self.configuration_locked()))
         if not self.selected_job:
+            for button in self.job_actions:
+                button.setEnabled(False)
             self.cancel_button.setEnabled(False)
             self.progress.hide()
             return
@@ -834,6 +890,14 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             for button in self.job_actions:
                 button.setEnabled(False)
             return
+        finished = info["state"] in TERMINAL
+        for button in self.job_actions:
+            if button is self.clone_button:
+                button.setEnabled(not self.configuration_locked())
+            elif button is getattr(self, "export_job_button", None):
+                button.setEnabled(finished)
+            else:
+                button.setEnabled(True)
         self.current_task_label.setText(info["name"])
         self.current_task_label.setObjectName("taskTitle")
         self.current_task_label.style().unpolish(self.current_task_label)
@@ -859,12 +923,37 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
             self.render_results()
         self.show_method_log()
 
+    def _on_metric_choice_changed(self, *args):
+        current = self.metric_choice.currentData()
+        self._auto_time_metric = False
+        if current:
+            self._benchmark_metric = current
+        self.render_results()
+
     def render_results(self):
         if not self.selected_job:
             return
         info = self.store.info(self.selected_job)
         runs = pd.DataFrame(info["runs"])
         benchmark = info["config"].get("command") == "benchmark"
+        combo_model = self.metric_choice.model()
+        for idx in range(self.metric_choice.count()):
+            item = combo_model.item(idx) if hasattr(combo_model, "item") else None
+            if item is not None:
+                item.setEnabled(benchmark or self.metric_choice.itemData(idx) == "time_s")
+        if not benchmark and self.metric_choice.currentData() != "time_s":
+            self._benchmark_metric = self.metric_choice.currentData() or self._benchmark_metric
+            self._auto_time_metric = True
+            prev_metric = self.metric_choice.blockSignals(True)
+            self.metric_choice.setCurrentIndex(self.metric_choice.findData("time_s"))
+            self.metric_choice.blockSignals(prev_metric)
+        elif benchmark and self._auto_time_metric:
+            self._auto_time_metric = False
+            target_idx = self.metric_choice.findData(self._benchmark_metric)
+            if target_idx >= 0:
+                prev_metric = self.metric_choice.blockSignals(True)
+                self.metric_choice.setCurrentIndex(target_idx)
+                self.metric_choice.blockSignals(prev_metric)
         if benchmark:
             show_best = (info["config"].get("training_policy") == "convergence"
                          or any(row.get("best_epoch") is not None for row in info["runs"]))
@@ -966,17 +1055,30 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
     def export_job(self):
         if not self.selected_job:
             return
+        try:
+            if self.store.info(self.selected_job)["state"] not in TERMINAL:
+                self.show_error(self.t("请在任务结束后导出结果"))
+                return
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            self.show_error(str(exc))
+            return
         path = QFileDialog.getSaveFileName(self, self.t("导出完整任务"), "JINGWEI-results.zip", "ZIP (*.zip)")[0]
         if path:
+            if Path(path).suffix.lower() != ".zip":
+                path = f"{path}.zip"
             self.background(self.store.export, lambda result: self.flash_status(self.t("完整任务已导出")), self.selected_job, path)
 
     def export_plot(self):
         if self.plot.source.empty:
             self.show_error(self.t("暂无可导出的图表数据"))
             return
-        path = QFileDialog.getSaveFileName(self, self.t("导出图表及源数据"), "JINGWEI-comparison.png", "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)")[0]
+        path, selected_filter = QFileDialog.getSaveFileName(self, self.t("导出图表及源数据"), "JINGWEI-comparison.png", "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)")
         if not path:
             return
+        if Path(path).suffix.lower() not in (".png", ".pdf", ".svg"):
+            filt = (selected_filter or "").lower()
+            ext = ".pdf" if "pdf" in filt else ".svg" if "svg" in filt else ".png"
+            path = f"{path}{ext}"
         try:
             self.plot.figure.savefig(path, dpi=300, facecolor="white")
             self.plot.source.to_csv(str(Path(path).with_suffix(".source.csv")), index=False)
@@ -1013,11 +1115,15 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self.method_parameters = parameters
         # Keep the recorded selection even if a newly selected runtime has not
         # finished probing availability yet.
+        prev_tree = self.method_tree.blockSignals(True)
         for name, box in self.method_checks.items():
             checked = name in methods
             box.setChecked(checked)
             if checked:
                 box.setEnabled(True)
+        self.method_tree.blockSignals(prev_tree)
+        self._sync_method_tree_selection(methods)
+        self.update_method_count()
         self.mode_changed()
         self.device_changed()
         self.training_policy_changed()
@@ -1027,8 +1133,8 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
         self.input_path.setFocus()
         source = next(Path(info["folder"]).glob("input.*"), None)
         if source is None and info["config"].get("input"):
-            candidate = Path(info["config"]["input"])
-            source = candidate if candidate.is_file() else None
+            cleaned_input = clean_path_text(info["config"]["input"])
+            source = Path(cleaned_input) if self._is_existing_file(cleaned_input) else None
         if source:
             self.set_input(source, info["config"].get("layer"))
             features = deepcopy(info["config"].get("w2_features"))

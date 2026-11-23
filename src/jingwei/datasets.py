@@ -104,6 +104,8 @@ class CSVDataset(Dataset):
             normalized_tensor = normalized_tensor.squeeze(1)
         mean = self.mean.squeeze(0) if self.mean.shape[0] == 1 else self.mean
         std = self.std.squeeze(0) if self.std.shape[0] == 1 else self.std
+        mean = mean.to(device=normalized_tensor.device, dtype=normalized_tensor.dtype)
+        std = std.to(device=normalized_tensor.device, dtype=normalized_tensor.dtype)
 
         if normalized_tensor.dim() == 1:
             if normalized_tensor.shape[0] != mean.shape[0]:

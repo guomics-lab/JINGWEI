@@ -475,9 +475,15 @@ def run_experiment(args):
                                 truth[score_mask],
                                 prediction[score_mask],
                             )
-                            visible_sd = float(np.std(truth[masks.available]))
+                            visible_sd = (
+                                float(np.std(truth[masks.available]))
+                                if masks.available.any()
+                                else 0.0
+                            )
                             result["NRMSE"] = (
-                                result["RMSE"] / visible_sd if visible_sd else None
+                                float(result["RMSE"] / visible_sd)
+                                if np.isfinite(visible_sd) and visible_sd > 0
+                                else None
                             )
                             varied = (
                                 len(actual) > 1

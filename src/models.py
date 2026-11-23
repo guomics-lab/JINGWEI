@@ -311,12 +311,14 @@ class DMF(nn.Module):
         full_matrix = self._reconstruct_rows(all_rows)        
         return full_matrix
     
-    def get_imputed_data(self):
+    def get_imputed_data(self, data_tensor, mask_tensor):
+        if data_tensor.shape != (self.n_rows, self.n_cols) or mask_tensor.shape != data_tensor.shape:
+            raise ValueError("data_tensor and mask_tensor must match (n_rows, n_cols)")
         self.eval()
         with torch.no_grad():
-            full_matrix = self.model.get_full_matrix()
-            imputed_data = self.full_data_tensor.clone()
-            unobserved_mask = (self.full_mask_tensor == 0)
+            full_matrix = self.get_full_matrix()
+            imputed_data = data_tensor.to(device=full_matrix.device, dtype=full_matrix.dtype).clone()
+            unobserved_mask = (mask_tensor.to(device=full_matrix.device) == 0)
             imputed_data[unobserved_mask] = full_matrix[unobserved_mask]
             
         return imputed_data

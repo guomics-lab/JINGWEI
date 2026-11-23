@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton, QComboBox,
     QLineEdit, QSpinBox, QCheckBox, QGroupBox, QDialog, QDialogButtonBox, QTabWidget,
     QTreeWidget, QTreeWidgetItem, QTableWidget, QHeaderView, QAbstractItemView,
-    QProgressBar, QPlainTextEdit, QSplitter, QScrollArea, QStackedWidget, QFrame,
+    QProgressBar, QPlainTextEdit, QSplitter, QScrollArea, QStackedWidget, QFrame, QStyle,
 )
 
 from .gui_i18n import translate
@@ -344,6 +344,12 @@ class WorkbenchLayout:
         row = QHBoxLayout()
         row.setSpacing(6)
         self.input_path = self.bind(QLineEdit(), "选择 CSV 或 AnnData (.h5ad)", "setPlaceholderText")
+        self.recheck_action = self.input_path.addAction(
+            self.style().standardIcon(QStyle.SP_BrowserReload),
+            QLineEdit.TrailingPosition,
+        )
+        self.bind(self.recheck_action, "重新检查数据", "setToolTip")
+        self.recheck_action.triggered.connect(self.recheck_input)
         row.addWidget(self.input_path, 1)
         row.addWidget(self.button("选择文件", self.choose_input))
         data.addLayout(row)
@@ -399,6 +405,8 @@ class WorkbenchLayout:
         self.method_tree.itemChanged.connect(self._on_method_item_changed)
         self.method_tree.currentItemChanged.connect(self.current_method_changed)
         self.method_tree.itemDoubleClicked.connect(lambda item, _: self.edit_current_method() if item.data(0, Qt.UserRole) else None)
+        if "jingwei-dmf" in self.method_checks:
+            self.method_tree.setCurrentItem(self.method_checks["jingwei-dmf"].item)
         methods.addWidget(self.method_tree, 1)
         config.setStretch(1, 1)
 
@@ -475,6 +483,8 @@ class WorkbenchLayout:
             button.setEnabled(False)
             header.addWidget(button)
             self.job_actions.append(button)
+            if label == "导出任务":
+                self.export_job_button = button
             if label == "复制配置":
                 self.clone_button = button
         results.addLayout(header)
@@ -511,7 +521,7 @@ class WorkbenchLayout:
         controls.setSpacing(8)
         self.metric_choice = self.options([(name, name) for name in ("MSE", "RMSE", "MAE", "NRMSE", "Pearson", "Spearman", "W2")] + [("耗时（秒）", "time_s")])
         self.metric_choice.setMinimumWidth(165)
-        self.metric_choice.currentIndexChanged.connect(self.render_results)
+        self.metric_choice.currentIndexChanged.connect(self._on_metric_choice_changed)
         controls.addWidget(self.metric_choice)
         self.paired = self.bind(QCheckBox(), "共同重复")
         self.paired.setChecked(True)
@@ -583,6 +593,7 @@ class WorkbenchLayout:
         self.dialog_buttons(preview_layout, self.preview_dialog, QDialogButtonBox.Close)
 
         self.input_path.textChanged.connect(self.invalidate_preview)
+        self.input_path.returnPressed.connect(self.recheck_input)
         self.input_path.editingFinished.connect(self.on_input_editing_finished)
         for key in ("scale", "transform"):
             self.fields[key].currentIndexChanged.connect(self.on_input_setting_changed)
@@ -600,6 +611,19 @@ class WorkbenchLayout:
         self.training_policy_changed()
         self.update_method_count()
 
+    def _sync_method_tree_selection(self, checked_names):
+        checked_set = set(checked_names)
+        for group in self.method_groups.values():
+            if any(group.child(i).data(0, Qt.UserRole) in checked_set for i in range(group.childCount())):
+                group.setExpanded(True)
+        current = self.method_tree.currentItem()
+        current_name = current.data(0, Qt.UserRole) if current else None
+        if checked_names and current_name not in checked_set:
+            first = next((n for n in checked_names if n in self.method_checks), None)
+            if first:
+                self.method_tree.setCurrentItem(self.method_checks[first].item)
+        self.current_method_changed(self.method_tree.currentItem())
+
     def _on_method_item_changed(self, item, column=0):
         name = item.data(0, Qt.UserRole) if item else None
         if (name and name in self.backend_states
@@ -609,17 +633,54 @@ class WorkbenchLayout:
             previous = self.method_tree.blockSignals(True)
             item.setDisabled(True)
             self.method_tree.blockSignals(previous)
+        if name and item.checkState(0) == Qt.Checked and self.method_tree.currentItem() is not item:
+            self.method_tree.setCurrentItem(item)
+        else:
+            self.current_method_changed(self.method_tree.currentItem())
         self.update_method_count()
 
+    def _is_existing_file(self, raw):
+        from .gui import clean_path_text
+        cleaned = clean_path_text(raw)
+        if not cleaned:
+            return False
+        try:
+            return Path(cleaned).is_file()
+        except OSError:
+            return False
+
+    def recheck_input(self):
+        from .gui import clean_path_text
+        if self.configuration_locked() or self._inspecting:
+            return
+        cleaned = clean_path_text(self.input_path.text())
+        if cleaned != self.input_path.text():
+            previous = self.input_path.blockSignals(True)
+            self.input_path.setText(cleaned)
+            self.input_path.blockSignals(previous)
+        self.input_path.setModified(False)
+        self.invalidate_preview()
+        self.inspect_data()
+
     def on_input_editing_finished(self):
-        raw = self.input_path.text().strip()
-        if raw and self.preview_data is None and not self._inspecting and Path(raw).is_file():
-            self.inspect_data()
+        from .gui import clean_path_text
+        cleaned = clean_path_text(self.input_path.text())
+        if cleaned != self.input_path.text():
+            previous = self.input_path.blockSignals(True)
+            self.input_path.setText(cleaned)
+            self.input_path.blockSignals(previous)
+        self.input_path.setModified(False)
+        if cleaned and self.preview_data is None and not self._inspecting:
+            if self._is_existing_file(cleaned):
+                self.inspect_data()
+            else:
+                self.update_data_labels()
 
     def on_input_setting_changed(self, *args):
+        from .gui import clean_path_text
         self.invalidate_preview()
-        raw = self.input_path.text().strip()
-        if raw and Path(raw).is_file():
+        cleaned = clean_path_text(self.input_path.text())
+        if cleaned and self._is_existing_file(cleaned):
             self.inspect_data()
 
     def build_advanced(self, mechanisms):
@@ -744,18 +805,25 @@ class WorkbenchLayout:
         return buttons
 
     def show_advanced(self, index=1):
-        from .gui import value
+        from .gui import value, clean_path_text
         if isinstance(index, bool):
             index = 1
         keys = ("rscript", "r_library", "naguider_source", "dreamai_source")
-        before = [value(self.fields[key]) for key in keys]
+        before = [clean_path_text(value(self.fields[key])) for key in keys]
         self.advanced_tabs.setCurrentIndex(index)
         self.advanced_dialog.exec()
-        if before != [value(self.fields[key]) for key in keys]:
+        if before != [clean_path_text(value(self.fields[key])) for key in keys]:
             self.refresh_environment()
-        raw = self.input_path.text().strip()
-        if raw and self.preview_data is None and Path(raw).is_file():
-            self.inspect_data()
+        cleaned = clean_path_text(self.input_path.text())
+        if cleaned and self._is_existing_file(cleaned) and not self._inspecting:
+            needs_inspect = self.preview_data is None
+            if not needs_inspect:
+                try:
+                    needs_inspect = self.signature() != self.preview_signature
+                except OSError:
+                    needs_inspect = True
+            if needs_inspect:
+                self.inspect_data()
 
     def show_preview(self):
         if self.preview_data:
@@ -763,7 +831,10 @@ class WorkbenchLayout:
 
     def current_method_changed(self, item, previous=None):
         name = item.data(0, Qt.UserRole) if item else None
-        self.parameter_button.setEnabled(bool(PARAMETERS.get(name)))
+        enabled = bool(PARAMETERS.get(name)) and item is not None and (
+            not item.isDisabled() or item.checkState(0) == Qt.Checked or not self.backend_states
+        )
+        self.parameter_button.setEnabled(enabled)
 
     def edit_current_method(self):
         item = self.method_tree.currentItem()
@@ -836,14 +907,16 @@ class WorkbenchLayout:
             except OSError:
                 pass
         self.invalidate_preview()
-        raw = self.input_path.text().strip()
-        if raw and Path(raw).is_file():
+        from .gui import clean_path_text
+        raw = clean_path_text(self.input_path.text())
+        if raw and self._is_existing_file(raw):
             self.inspect_data()
 
     def method_label(self, name):
         return LABELS.get(name, name)
 
     def update_data_labels(self):
+        from .gui import clean_path_text
         if self.preview_data:
             data = self.preview_data
             self.data_summary.setText(self.t("{samples:,} 样本 × {features:,} 蛋白 · 缺失 {missing:.1%}", samples=data["samples"], features=data["features"], missing=data["missing_rate"]))
@@ -854,8 +927,18 @@ class WorkbenchLayout:
             self.preview_details.setText(details)
             self.data_summary.setToolTip(details)
         else:
-            raw = self.input_path.text().strip()
-            self.data_summary.setText(self.t("正在读取并检查数据…" if self._inspecting else "数据或读取设置已更改，请检查数据。" if raw else "尚未载入数据"))
+            raw = clean_path_text(self.input_path.text())
+            if self._inspecting:
+                summary = self.t("正在读取并检查数据…")
+            elif getattr(self, "_inspect_error", None):
+                summary = self.t("数据检查失败：{error}", error=self._inspect_error)
+            elif not raw:
+                summary = self.t("尚未载入数据")
+            elif not self._is_existing_file(raw):
+                summary = self.t("文件不存在，请检查路径或重新选择。")
+            else:
+                summary = self.t("按回车或点击刷新图标重新检查数据。")
+            self.data_summary.setText(summary)
         self.preview_button.setEnabled(self.preview_data is not None)
         self.w2_note.setText(self.t("W2：{count} 个蛋白", count=len(self.feature_selection)) if self.feature_selection else self.t("W2：所有蛋白"))
 
@@ -911,6 +994,7 @@ class WorkbenchLayout:
         self.refresh_jobs()
         if selected_row >= 0:
             self.result_table.selectRow(selected_row)
+            self.show_method_log()
         if not self.selected_job:
             self.plot.empty(self.t("暂无可比较数据"))
             self.current_task_label.setText(self.t("尚无任务"))

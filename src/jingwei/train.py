@@ -89,8 +89,9 @@ class ImputationTrainer:
             dirpath=self.checkpoint_dir,
             filename=(
                 f"{self.args.method}_{dataset_name}_mask{self.args.mask_weight:.2f}_"
-                "{epoch:02d}_{train/loss:.4f}"
+                "ep{epoch:02d}_loss{train/loss:.4f}"
             ),
+            auto_insert_metric_name=False,
             monitor="train/loss",
             mode="min",
             save_top_k=1,
@@ -161,18 +162,21 @@ class ImputationTrainer:
     def save_config(self, dataset_name):
         import json
 
-        config = vars(self.args)
+        config = {
+            key: str(val) if isinstance(val, Path) else val
+            for key, val in vars(self.args).items()
+        }
         config["dataset_name"] = dataset_name
         config["timestamp"] = time.strftime("%Y-%m-%d %H:%M:%S")
-        with open(self.run_dir / "config.json", "w") as f:
-            json.dump(config, f, indent=4)
+        with open(self.run_dir / "config.json", "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
 
     def save_imputed_data(self, model, dataset, dataset_name):
         model.eval()
         with torch.no_grad():
             normalized_imputed = model.get_imputed_data()
             imputed_data = dataset.inverse_transform(normalized_imputed).cpu().numpy()
-            df_original = pd.read_csv(self.args.data_path)
+            df_original = pd.read_csv(self.args.data_path, index_col=False)
             if (
                 df_original.shape[0] == imputed_data.shape[0]
                 and df_original.shape[1] - 1 == imputed_data.shape[1]

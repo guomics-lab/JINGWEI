@@ -1,9 +1,39 @@
 # Official R package adapters; input and output are samples x features.
 args <- commandArgs(trailingOnly=TRUE)
 if (length(args) >= 1 && args[1] == '--check') {
+  base_pkgs <- c('R', 'base', 'compiler', 'datasets', 'graphics', 'grDevices',
+                 'grid', 'methods', 'parallel', 'splines', 'stats', 'stats4',
+                 'tcltk', 'tools', 'utils')
+  avail_map <- new.env(parent=emptyenv())
+  ver_map <- new.env(parent=emptyenv())
+  visiting <- new.env(parent=emptyenv())
+  parse_deps <- function(raw) {
+    if (is.null(raw) || is.na(raw) || !nzchar(raw)) return(character(0))
+    parts <- trimws(strsplit(raw, ',', fixed=TRUE)[[1]])
+    parts <- sub('[[:space:]]*\\(.*$', '', parts)
+    parts[nzchar(parts) & !(parts %in% base_pkgs)]
+  }
+  has_pkg <- function(pkg) {
+    if (pkg %in% base_pkgs) return(TRUE)
+    if (exists(pkg, envir=avail_map, inherits=FALSE)) return(get(pkg, envir=avail_map))
+    if (exists(pkg, envir=visiting, inherits=FALSE)) return(TRUE)
+    desc <- suppressWarnings(utils::packageDescription(pkg, fields=c('Version', 'Depends', 'Imports')))
+    if (!is.list(desc) || is.na(desc[['Version']])) {
+      assign(pkg, FALSE, envir=avail_map)
+      return(FALSE)
+    }
+    assign(pkg, TRUE, envir=visiting)
+    on.exit(if (exists(pkg, envir=visiting, inherits=FALSE)) rm(list=pkg, envir=visiting), add=TRUE)
+    deps <- unique(c(parse_deps(desc[['Depends']]), parse_deps(desc[['Imports']])))
+    ok <- all(vapply(deps, has_pkg, logical(1)))
+    assign(pkg, ok, envir=avail_map)
+    if (ok) assign(pkg, as.character(desc[['Version']]), envir=ver_map)
+    ok
+  }
+  dll_ok <- suppressWarnings(requireNamespace('jsonlite', quietly=TRUE))
   for (pkg in args[-1]) {
-    present <- suppressWarnings(requireNamespace(pkg, quietly=TRUE))
-    ver <- if (present) as.character(utils::packageVersion(pkg)) else ''
+    present <- dll_ok && has_pkg(pkg)
+    ver <- if (present) get(pkg, envir=ver_map) else ''
     cat(pkg, if (present) 'TRUE' else 'FALSE', ver, sep='\t'); cat('\n')
   }
   quit(status=0)

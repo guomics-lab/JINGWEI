@@ -98,10 +98,27 @@ def canonical_name(name):
     return name
 
 
+def _clean_path(raw):
+    if raw is None:
+        return ""
+    text = str(raw).strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ('"', "'"):
+        text = text[1:-1].strip()
+    return text
+
+
 def find_rscript(explicit=None):
+    explicit = _clean_path(explicit)
     if explicit:
         path = Path(explicit)
-        return str(path.resolve()) if path.is_file() else shutil.which(explicit)
+        if path.is_file():
+            return str(path.resolve())
+        if path.is_dir():
+            exe = "Rscript.exe" if os.name == "nt" else "Rscript"
+            for candidate in (path / exe, path / "bin" / exe):
+                if candidate.is_file():
+                    return str(candidate.resolve())
+        return shutil.which(explicit)
     if getattr(sys, "frozen", False):
         bundled = resource_root() / ".r-runtime/bin/Rscript.exe"
         if bundled.is_file():
@@ -140,7 +157,7 @@ def r_environment(library=None):
         if getattr(sys, "frozen", False) and (resource_root() / ".r-runtime/bin/Rscript.exe").is_file():
             env["R_HOME"] = str(resource_root() / ".r-runtime")
     root = resource_root() / ".r-library"
-    requested = library or env.get("JINGWEI_R_LIBRARY")
+    requested = _clean_path(library) or _clean_path(env.get("JINGWEI_R_LIBRARY"))
     directory = Path(requested) if requested else root / platform_name()
     usable = directory.is_dir() and (
         platform_name() != "windows" or (directory / "jsonlite").is_dir()
@@ -186,7 +203,7 @@ def availability(
             check = subprocess.run(
                 [rscript, "--vanilla", str(bridge), "--check", *packages],
                 env=r_environment(r_library), capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=45,
+                encoding="utf-8", errors="replace", timeout=120,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
             if check.returncode == 0:

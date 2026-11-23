@@ -17,7 +17,7 @@ import zipfile
 import psutil
 
 from .cli import parser
-from .methods import canonical_name
+from .methods import canonical_name, _clean_path
 from .platforms import validate_device
 from .runtime import python_command, user_workspace
 from .atomic import write_json
@@ -109,7 +109,7 @@ def make_argv(config, input_path, output_path, cancel_file=None, parameter_file=
         raise ValueError("MNAR 缺失概率必须随丰度降低而增加")
     if args.mechanism == JINGWEI_MECHANISM and not args.logistic_slope < 0:
         raise ValueError("JINGWEI MNAR 斜率必须为负数")
-    for key in ("max_epochs", "batch_size", "latent_dim", "threads", "timeout", "repeats", "patience", "min_epochs"):
+    for key in ("max_epochs", "batch_size", "latent_dim", "dmf_rank", "threads", "timeout", "repeats", "patience", "min_epochs"):
         if getattr(args, key) <= 0:
             raise ValueError(f"{key} 必须大于 0")
     if not 0 < args.validation_fraction < 1 or not 0 <= args.min_delta < 1:
@@ -257,7 +257,10 @@ class JobStore:
                 "completion": done}
 
     def submit(self, source, config, parameters=None, name="", output_root=None):
-        source = Path(source).resolve()
+        cleaned_source = _clean_path(source)
+        if not cleaned_source:
+            raise ValueError("请选择有效的 CSV 或 h5ad 文件")
+        source = Path(cleaned_source).resolve()
         if not source.is_file() or source.suffix.lower() not in (".csv", ".h5ad"):
             raise ValueError("请选择有效的 CSV 或 h5ad 文件")
         with self._lock:
@@ -270,7 +273,10 @@ class JobStore:
             if output_root is None:
                 folder = self.jobs / job_id
             else:
-                base = Path(output_root).expanduser().resolve()
+                cleaned_root = _clean_path(output_root)
+                if not cleaned_root:
+                    raise ValueError("请选择输出目录")
+                base = Path(cleaned_root).expanduser().resolve()
                 base.mkdir(parents=True, exist_ok=True)
                 label = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', task_name).strip(' .')[:80] or 'benchmark'
                 suffix = f"-{stamp}" if supplied_name else ""

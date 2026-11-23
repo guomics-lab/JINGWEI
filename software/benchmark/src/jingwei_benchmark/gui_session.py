@@ -10,7 +10,7 @@ import math
 class SessionState:
     def restore_session(self, *, load_input):
         from pathlib import Path
-        from .gui import set_value
+        from .gui import set_value, clean_path_text
         data = read_json(self.store.root / "session.json")
         if not isinstance(data, dict) or data.get("schema") != 1:
             return False
@@ -74,25 +74,35 @@ class SessionState:
         self.training_policy_changed()
         methods = data.get("methods")
         if isinstance(methods, list) and all(isinstance(name, str) for name in methods):
+            prev_tree = self.method_tree.blockSignals(True)
             for name, box in self.method_checks.items():
                 box.setChecked(name in methods)
+            self.method_tree.blockSignals(prev_tree)
+            self._sync_method_tree_selection(methods)
+            self.update_method_count()
         if isinstance(parameters, dict):
             from .gui_parameters import PARAMETERS, valid_overrides
             self.method_parameters = {name: valid_overrides(name, settings)
                                       for name, settings in parameters.items() if isinstance(settings, dict) and name in PARAMETERS}
         self.job_name.setText(data.get("job_name", "") if isinstance(data.get("job_name", ""), str) else "")
         if isinstance(data.get("output_root"), str):
-            self.output_root.setText(data["output_root"])
+            self.output_root.setText(clean_path_text(data["output_root"]) or data["output_root"])
         for key, restore in (("geometry", self.restoreGeometry), ("splitter", self.main_splitter.restoreState)):
             if isinstance(data.get(key), str):
                 restore(QByteArray.fromBase64(data[key].encode("ascii", errors="ignore")))
-        metric = self.metric_choice.findData(data.get("metric"))
+        saved_metric = data.get("metric")
+        metric = self.metric_choice.findData(saved_metric)
         if metric >= 0:
             self.metric_choice.setCurrentIndex(metric)
+            self._benchmark_metric = saved_metric
         self.paired.setChecked(data.get("paired", True) is not False)
-        source = data.get("input")
+        source = clean_path_text(data.get("input")) if isinstance(data.get("input"), str) else None
         if load_input and isinstance(source, str) and source:
-            if Path(source).is_file():
+            try:
+                exists = Path(source).is_file()
+            except OSError:
+                exists = False
+            if exists:
                 self.set_input(source, fields.get("layer"))
                 features = data.get("w2_features")
                 if isinstance(features, list) and all(isinstance(name, str) for name in features):
@@ -133,7 +143,8 @@ class SessionState:
                 "input": self.input_path.text(), "methods": [name for name, box in self.method_checks.items() if box.isChecked()],
                 "parameters": self.method_parameters, "w2_features": self._pending_features[1] if self._pending_features else self.feature_selection,
                 "job_name": self.job_name.text(), "output_root": self.output_root.text(),
-                "metric": self.metric_choice.currentData(), "paired": self.paired.isChecked(),
+                "metric": self._benchmark_metric if getattr(self, "_auto_time_metric", False) else self.metric_choice.currentData(),
+                "paired": self.paired.isChecked(),
                 "result_tab": self.result_tabs.currentIndex(),
                 "geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),
                 "splitter": bytes(self.main_splitter.saveState().toBase64()).decode("ascii")}

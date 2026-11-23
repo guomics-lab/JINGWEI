@@ -24,7 +24,7 @@ def inspect_environment(options, *, cancel_event=None):
                 stdout=log, stderr=subprocess.STDOUT,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 env={**os.environ, "PYTHONUTF8": "1", "JINGWEI_PROCESS_LOG": str(folder / "probe.log")})
-            deadline = time.monotonic() + (180 if getattr(sys, "frozen", False) else 65)
+            deadline = time.monotonic() + 180
             try:
                 while True:
                     if cancel_event is not None and cancel_event.is_set():
