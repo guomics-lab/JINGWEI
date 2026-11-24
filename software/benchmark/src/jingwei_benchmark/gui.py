@@ -135,12 +135,15 @@ class BackgroundTask(QRunnable):
         super().__init__()
         self.function, self.args = function, args
         self.signals = TaskSignals()
+        self.finished_event = threading.Event()
 
     def run(self):
         try:
             self.signals.done.emit(self.function(*self.args))
         except Exception as exc:
             self.signals.error.emit(str(exc))
+        finally:
+            self.finished_event.set()
 
 
 class ParameterDialog(QDialog):
@@ -1168,9 +1171,12 @@ class BenchmarkWindow(SessionState, WorkbenchLayout, QMainWindow):
                 return
         for job in active:
             self.store.cancel(job["id"], force=True)
+        self.store.shutdown_all()
         self.save_session()
         self._closed = True
         self._environment_cancel.set()
+        for task in list(self._tasks):
+            task.finished_event.wait(timeout=3.0)
         self._session_timer.stop()
         self.timer.stop()
         event.accept()

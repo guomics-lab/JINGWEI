@@ -43,8 +43,7 @@ class DMFImputer(pl.LightningModule):
             train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=20,
-            persistent_workers=True
+            num_workers=0,
         )
     
     def training_step(self, batch, batch_idx):

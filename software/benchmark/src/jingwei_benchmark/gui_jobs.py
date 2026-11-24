@@ -1,5 +1,6 @@
 """Desktop jobs use the same CLI and isolated workers, with durable results."""
 
+import atexit
 from datetime import datetime, timezone
 import json
 import math
@@ -12,6 +13,7 @@ import subprocess
 import threading
 import time
 import uuid
+import weakref
 import zipfile
 
 import psutil
@@ -19,6 +21,7 @@ import psutil
 from .cli import parser
 from .methods import canonical_name, _clean_path
 from .platforms import validate_device
+from .process_guard import ManagedProcessTree, parent_watchdog_env
 from .runtime import python_command, user_workspace
 from .atomic import write_json
 from .protocol import ORIGINAL_MECHANISM, JINGWEI_MECHANISM, uses_mask_rate
@@ -126,8 +129,20 @@ class JobStore:
         self.jobs.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._processes = {}
+        self._trees = {}
         self._folders = {}
         self._cli_jobs = set()
+        ref = weakref.ref(self)
+        atexit.register(lambda: (store := ref()) is not None and store.shutdown_all())
+
+    def _cleanup_tree(self, job_id):
+        tree = self._trees.pop(job_id, None)
+        if tree is not None:
+            tree.close()
+
+    def shutdown_all(self):
+        for job_id in list(self._trees):
+            self._cleanup_tree(job_id)
 
     def _folder(self, job_id):
         if len(job_id) != 32 or any(c not in "0123456789abcdef" for c in job_id):
@@ -303,14 +318,27 @@ class JobStore:
                         stdout=log, stderr=subprocess.STDOUT, cwd=folder,
                         start_new_session=os.name != "nt",
                         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-                        env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8",
+                        env=parent_watchdog_env({**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8",
                              "PYTHONUNBUFFERED": "1",
-                             "MPLBACKEND": "Agg", "JINGWEI_PROCESS_LOG": str(folder / "launch.log")})
-                request.update(pid=process.pid, process_created=psutil.Process(process.pid).create_time())
+                             "MPLBACKEND": "Agg", "JINGWEI_PROCESS_LOG": str(folder / "launch.log")}))
+                tree = ManagedProcessTree(process)
+                try:
+                    created = psutil.Process(process.pid).create_time()
+                except BaseException:
+                    tree.terminate()
+                    raise
+                request.update(pid=process.pid, process_created=created)
                 write_json(folder / "request.json", request)
                 self._processes[job_id] = process
-                threading.Thread(target=process.wait, daemon=True).start()
+                self._trees[job_id] = tree
+                def _reap():
+                    try:
+                        process.wait()
+                    finally:
+                        self._cleanup_tree(job_id)
+                threading.Thread(target=_reap, daemon=True).start()
             except Exception as exc:
+                self._cleanup_tree(job_id)
                 write_json(folder / "completion.json", {"return_code": 1, "error": str(exc)})
                 if request is not None:
                     write_json(folder / "request.json", request)
@@ -320,27 +348,21 @@ class JobStore:
     def _stop_tree(self, job_id):
         info = self.info(job_id)
         owned = self._processes.get(job_id)
-        if owned is None or owned.pid != info.get("pid") or not self._alive(info):
+        tree = self._trees.pop(job_id, None)
+        alive = owned is not None and owned.pid == info.get("pid") and self._alive(info)
+        if tree is not None:
+            tree.terminate()
+        if not alive:
             return
-        try:
-            parent = psutil.Process(info["pid"])
-            children = parent.children(recursive=True)
-            # Isolated method workers have their own POSIX process groups.
-            # Enumerate only descendants of this recorded, creation-time-verified job.
-            for child in reversed(children):
-                try:
-                    child.kill()
-                except psutil.Error:
-                    pass
-            parent.kill()
-            psutil.wait_procs([parent, *children], timeout=3)
-        except psutil.Error:
-            pass
-        write_json(self._folder(job_id) / "completion.json", {"return_code": 3, "forced_stop": True})
+        from .process_guard import _kill_psutil_tree
+        _kill_psutil_tree(info["pid"])
+        if not (self._folder(job_id) / "completion.json").is_file():
+            write_json(self._folder(job_id) / "completion.json", {"return_code": 3, "forced_stop": True})
 
     def cancel(self, job_id, force=False):
         folder = self._folder(job_id)
         if self.info(job_id)["state"] in TERMINAL:
+            self._cleanup_tree(job_id)
             return
         if job_id not in self._processes:
             raise ValueError("只能停止当前窗口启动的任务")
@@ -350,8 +372,13 @@ class JobStore:
         else:
             def fallback():
                 time.sleep(8)
-                if self.info(job_id)["state"] not in TERMINAL:
-                    self._stop_tree(job_id)
+                try:
+                    if self.info(job_id)["state"] not in TERMINAL:
+                        self._stop_tree(job_id)
+                    else:
+                        self._cleanup_tree(job_id)
+                except (ValueError, OSError):
+                    self._cleanup_tree(job_id)
             threading.Thread(target=fallback, daemon=True).start()
 
     def export(self, job_id, destination):

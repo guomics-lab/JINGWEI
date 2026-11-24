@@ -10,7 +10,9 @@ from .cli import main as cli_main
 
 def main():
     from .runtime import prepare_standard_streams
+    from .process_guard import finalize_worker_exit, start_parent_watchdog
     prepare_standard_streams()
+    start_parent_watchdog()
     request_file = Path(sys.argv[1])
     try:
         request = read_json(request_file)
@@ -21,7 +23,7 @@ def main():
         traceback.print_exc()
         code = 1
     write_json(request_file.parent / "completion.json", {"return_code": code})
-    return code
+    return finalize_worker_exit(code)
 
 
 if __name__ == "__main__":

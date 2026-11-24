@@ -10,7 +10,9 @@ import traceback
 
 def main():
     from .runtime import prepare_standard_streams
+    from .process_guard import finalize_worker_exit, start_parent_watchdog
     prepare_standard_streams()
+    start_parent_watchdog()
     payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     folder = Path(payload["folder"])
     started = time.perf_counter()
@@ -89,7 +91,7 @@ def main():
     metadata["time_s"] = time.perf_counter() - started
     from .atomic import write_json
     write_json(folder / "worker_result.json", metadata)
-    return 0 if metadata["status"] == "completed" else 1
+    return finalize_worker_exit(0 if metadata["status"] == "completed" else 1)
 
 
 if __name__ == "__main__":

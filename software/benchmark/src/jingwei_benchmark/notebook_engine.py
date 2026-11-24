@@ -135,11 +135,28 @@ def _run_jingwei(name, available, params, legacy, device):
             if epoch == 1 or epoch % 5 == 0 or epoch == params["max_epochs"]:
                 print(f"Original notebook | epoch {epoch}/{params['max_epochs']}", flush=True)
 
+    def _shutdown_persistent_loaders(trainer_obj):
+        combined = getattr(getattr(trainer_obj, "fit_loop", None), "_combined_loader", None)
+        iterables = getattr(combined, "flattened", []) if combined is not None else []
+        for loader in iterables:
+            iterator = getattr(loader, "_iterator", None)
+            shutdown = getattr(iterator, "_shutdown_workers", None)
+            if callable(shutdown):
+                try:
+                    shutdown()
+                except Exception:
+                    pass
+            if hasattr(loader, "_iterator"):
+                loader._iterator = None
+
     recorder = EpochLog()
     trainer = pl.Trainer(max_epochs=params["max_epochs"], accelerator=device, devices=1,
                          logger=False, enable_checkpointing=False, enable_progress_bar=False,
                          enable_model_summary=False, log_every_n_steps=1, callbacks=[recorder])
-    trainer.fit(model)
+    try:
+        trainer.fit(model)
+    finally:
+        _shutdown_persistent_loaders(trainer)
     model.cpu().eval()
     with torch.no_grad():
         output = model.get_imputed_data().cpu()

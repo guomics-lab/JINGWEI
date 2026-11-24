@@ -21,12 +21,16 @@ from .methods import METHODS, availability, canonical_name
 from .metrics import imputation_metrics, wasserstein_distance_2
 from .protocol import ORIGINAL_MECHANISM, protocol_masks, uses_mask_rate
 from .platforms import resolve_device
+from .process_guard import ManagedProcessTree, parent_watchdog_env
 from .runtime import python_command
 from .presets import preset_parameters
 from .atomic import write_json as dump_json
 
 
-def _stop_process(process):
+def _stop_process(process, tree=None):
+    if tree is not None:
+        tree.terminate()
+        return
     if os.name == "nt":
         subprocess.run(
             ["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True
@@ -50,16 +54,17 @@ def _run_worker(payload, timeout, cancel_file=None):
             stdout=log,
             stderr=subprocess.STDOUT,
             start_new_session=os.name != "nt",
-            env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8",
+            env=parent_watchdog_env({**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8",
                  "PYTHONUNBUFFERED": "1",
-                 "JINGWEI_PROCESS_LOG": str((folder / "run.log").resolve())},
+                 "JINGWEI_PROCESS_LOG": str((folder / "run.log").resolve())}),
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
+        tree = ManagedProcessTree(process)
         try:
             deadline = time.monotonic() + timeout
             while True:
                 if cancel_file and Path(cancel_file).exists():
-                    _stop_process(process)
+                    _stop_process(process, tree)
                     for name in ("predictions.npz", "worker_result.json"):
                         late = folder / name
                         if late.is_file():
@@ -75,7 +80,7 @@ def _run_worker(payload, timeout, cancel_file=None):
                 except subprocess.TimeoutExpired:
                     continue
         except subprocess.TimeoutExpired:
-            _stop_process(process)
+            _stop_process(process, tree)
             # A worker can finish during Windows process-tree termination.
             # Preserve late artifacts for inspection, but never accept them as results.
             for name in ("predictions.npz", "worker_result.json"):
@@ -88,8 +93,10 @@ def _run_worker(payload, timeout, cancel_file=None):
                 "time_s": time.perf_counter() - started,
             }
         except BaseException:
-            _stop_process(process)
+            _stop_process(process, tree)
             raise
+        finally:
+            tree.close()
     result_file = folder / "worker_result.json"
     if not result_file.is_file():
         return {

@@ -10,6 +10,7 @@ import time
 from .gui_jobs import read_json, write_json
 from .methods import availability, find_method_source
 from .platforms import cuda_supported
+from .process_guard import ManagedProcessTree, finalize_worker_exit, parent_watchdog_env, start_parent_watchdog
 from .runtime import python_command, prepare_standard_streams
 
 
@@ -22,8 +23,10 @@ def inspect_environment(options, *, cancel_event=None):
             command = python_command("gui_environment", request, result)
             process = subprocess.Popen(command,
                 stdout=log, stderr=subprocess.STDOUT,
+                start_new_session=os.name != "nt",
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-                env={**os.environ, "PYTHONUTF8": "1", "JINGWEI_PROCESS_LOG": str(folder / "probe.log")})
+                env=parent_watchdog_env({**os.environ, "PYTHONUTF8": "1", "JINGWEI_PROCESS_LOG": str(folder / "probe.log")}))
+            tree = ManagedProcessTree(process)
             deadline = time.monotonic() + 180
             try:
                 while True:
@@ -37,28 +40,7 @@ def inspect_environment(options, *, cancel_event=None):
                     except subprocess.TimeoutExpired:
                         pass
             finally:
-                if process.poll() is None:
-                    import psutil
-                    try:
-                        descendants = psutil.Process(process.pid).children(recursive=True)
-                        for child in descendants:
-                            try:
-                                child.terminate()
-                            except psutil.NoSuchProcess:
-                                pass
-                        process.terminate()
-                        _, alive = psutil.wait_procs(descendants, timeout=1)
-                        for child in alive:
-                            try:
-                                child.kill()
-                            except psutil.NoSuchProcess:
-                                pass
-                    finally:
-                        try:
-                            process.wait(timeout=2)
-                        except subprocess.TimeoutExpired:
-                            process.kill()
-                            process.wait()
+                tree.close()
         if process.returncode or not result.is_file():
             raise RuntimeError((folder / "probe.log").read_text(encoding="utf-8", errors="replace")[-2000:] or "计算环境检查失败")
         data = read_json(result)
@@ -67,6 +49,7 @@ def inspect_environment(options, *, cancel_event=None):
 
 def main():
     prepare_standard_streams()
+    start_parent_watchdog()
     options = read_json(sys.argv[1])
     states = availability(options.get("rscript"), options.get("r_library"),
                           options.get("naguider_source") or find_method_source("NAguideR"),
@@ -82,7 +65,7 @@ def main():
         except ImportError:
             pass
     write_json(sys.argv[2], {"states": states, "gpu": gpu, "gpu_name": gpu_name})
-    return 0
+    return finalize_worker_exit(0)
 
 
 if __name__ == "__main__":
